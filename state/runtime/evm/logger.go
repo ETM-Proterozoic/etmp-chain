@@ -38,6 +38,17 @@ type StructLog struct {
 type Txn interface {
 	GetState(addr types.Address, key types.Hash) types.Hash
 	GetRefund() uint64
+	GetBalance(addr types.Address) *big.Int
+	GetNonce(addr types.Address) uint64
+	GetCode(addr types.Address) []byte
+	Exist(addr types.Address) bool
+}
+
+type Transition interface {
+	Block() *types.Block
+	GetTxnHash() types.Hash
+	GetTxContext() runtime.TxContext
+	Txn() *Txn
 }
 
 // OpName formats the operand name in a human-readable format.
@@ -59,7 +70,7 @@ func (s *StructLog) ErrorString() string {
 // a track record of modified storage which is used in reporting snapshots of the
 // contract their storage.
 type StructLogger struct {
-	cfg types.LoggerConfig
+	cfg types.TraceConfig
 
 	storage map[types.Address]Storage
 	txn     Txn
@@ -69,7 +80,7 @@ type StructLogger struct {
 }
 
 // NewStructLogger returns a new logger
-func NewStructLogger(cfg *types.LoggerConfig, txn Txn) *StructLogger {
+func NewStructLogger(cfg *types.TraceConfig, txn Txn) *StructLogger {
 	logger := &StructLogger{
 		storage: make(map[types.Address]Storage),
 		txn:     txn,
@@ -100,18 +111,18 @@ func (l *StructLogger) CaptureState(pc uint64, op int, gas, cost uint64, scope r
 	stack := scope.Stack
 	contract := scope.Contract
 	// check if already accumulated the specified number of logs
-	if l.cfg.Limit != 0 && l.cfg.Limit <= len(l.logs) {
+	if l.cfg.LoggerConfig.Limit != 0 && l.cfg.LoggerConfig.Limit <= len(l.logs) {
 		return
 	}
 	// Copy a snapshot of the current memory state to a new buffer
 	var mem []byte
-	if l.cfg.EnableMemory {
+	if l.cfg.LoggerConfig.EnableMemory {
 		mem = make([]byte, len(memory))
 		copy(mem, memory)
 	}
 	// Copy a snapshot of the current stack state to a new buffer
 	var stck []string
-	if !l.cfg.DisableStack {
+	if !l.cfg.LoggerConfig.DisableStack {
 		stck = make([]string, len(stack))
 		for i, item := range stack {
 			stck[i] = "0x" + item.Text(16)
@@ -122,7 +133,7 @@ func (l *StructLogger) CaptureState(pc uint64, op int, gas, cost uint64, scope r
 	stackLen := len(stackData)
 	// Copy a snapshot of the current storage to a new container
 	var storage Storage
-	if !l.cfg.DisableStorage && (op == SLOAD || op == SSTORE) {
+	if !l.cfg.LoggerConfig.DisableStorage && (op == SLOAD || op == SSTORE) {
 		// initialise new changed values storage container for this contract
 		// if not present.
 		if l.storage[contract.Address] == nil {
@@ -147,7 +158,7 @@ func (l *StructLogger) CaptureState(pc uint64, op int, gas, cost uint64, scope r
 		}
 	}
 	var rdata []byte
-	if l.cfg.EnableReturnData {
+	if l.cfg.LoggerConfig.EnableReturnData {
 		rdata = make([]byte, len(rData))
 		copy(rdata, rData)
 	}
@@ -164,7 +175,7 @@ func (l *StructLogger) CaptureFault(pc uint64, op int, gas, cost uint64, scope r
 func (l *StructLogger) CaptureEnd(output []byte, gasUsed uint64, t time.Duration, err error) {
 	l.output = output
 	l.err = err
-	if l.cfg.Debug {
+	if l.cfg.LoggerConfig.Debug {
 		fmt.Printf("0x%x\n", output)
 		if err != nil {
 			fmt.Printf(" error: %v\n", err)

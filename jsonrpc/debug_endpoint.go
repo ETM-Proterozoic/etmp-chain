@@ -20,7 +20,7 @@ type ExecutionResult struct {
 }
 
 // TraceTransaction returns the version of the web3 client (web3_clientVersion)
-func (d *Debug) TraceTransaction(hash types.Hash, config types.LoggerConfig) (interface{}, error) {
+func (d *Debug) TraceTransaction(hash types.Hash, config types.TraceConfig) (interface{}, error) {
 	// findSealedTx is a helper method for checking the world state
 	// for the transaction with the provided hash
 	findSealedTx := func() (*types.Transaction, *types.Block) {

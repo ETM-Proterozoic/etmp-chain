@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"math"
 	"math/big"
+	"reflect"
 	"time"
 
 	"github.com/0xPolygon/polygon-edge/chain"
@@ -473,10 +474,20 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 	t.ctx.Origin = msg.From
 
 	// Set Tracer
-	t.tracer = evm.NewStructLogger(msg.LoggerConfig, txn)
-	defer func() {
-		t.tracer = nil
-	}()
+	//if(msg.LoggerConfig)
+	if msg.LoggerConfig != nil {
+		fmt.Printf("msg.LoggerConfig", msg.LoggerConfig.Tracer)
+		if msg.LoggerConfig.Tracer != nil {
+			//TODO txn error
+			//t.tracer, _ = evm.NewJsTracer(*msg.LoggerConfig.Tracer, t)
+		} else {
+			t.tracer = evm.NewStructLogger(msg.LoggerConfig, txn)
+		}
+
+		defer func() {
+			t.tracer = nil
+		}()
+	}
 
 	var result *runtime.ExecutionResult
 	if msg.IsContractCreation() {
@@ -526,13 +537,14 @@ func (t *Transition) Call2(
 	c := runtime.NewContractCall(1, caller, caller, to, value, gas, t.state.GetCode(to), input)
 	ret := t.applyCall(c, runtime.Call, t)
 	tracer := t.GetTracer()
-	if tracer != nil {
+	if !reflect.ValueOf(tracer).IsNil() {
 		ret.Tracer = tracer
 	}
 	return ret
 }
 
 func (t *Transition) run(contract *runtime.Contract, host runtime.Host) *runtime.ExecutionResult {
+
 	for _, r := range t.r.runtimes {
 		if r.CanRun(contract, host, &t.config) {
 			return r.Run(contract, host, &t.config)
@@ -594,7 +606,7 @@ func (t *Transition) applyCall(
 	var result *runtime.ExecutionResult
 
 	tracer := host.GetTracer()
-	if tracer != nil {
+	if !reflect.ValueOf(tracer).IsNil() {
 		if c.Depth == 1 {
 			// 创建
 			tracer.CaptureStart()
@@ -690,7 +702,7 @@ func (t *Transition) applyCreate(c *runtime.Contract, host runtime.Host) *runtim
 	var result *runtime.ExecutionResult
 
 	tracer := host.GetTracer()
-	if tracer != nil {
+	if !reflect.ValueOf(tracer).IsNil() {
 		if c.Depth == 1 {
 			tracer.CaptureStart()
 			defer func(startGas uint64, startTime time.Time) { // Lazy evaluation of the parameters
@@ -812,6 +824,10 @@ func (t *Transition) Callx(c *runtime.Contract, h runtime.Host) *runtime.Executi
 	}
 
 	return t.applyCall(c, c.Type, h)
+}
+
+func (t *Transition) Block() *types.Block {
+	return t.block
 }
 
 // SetAccountDirectly sets an account to the given address

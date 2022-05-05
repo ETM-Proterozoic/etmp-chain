@@ -6,6 +6,14 @@ import (
 	"sync/atomic"
 )
 
+// TraceConfig holds extra parameters to trace functions.
+type TraceConfig struct {
+	*LoggerConfig
+	Tracer  *string
+	Timeout *string
+	Reexec  *uint64
+}
+
 // Config are the configuration options for structured logger the EVM
 type LoggerConfig struct {
 	EnableMemory     bool // enable memory capture
@@ -32,7 +40,7 @@ type Transaction struct {
 	// Cache
 	size atomic.Value
 
-	LoggerConfig *LoggerConfig
+	LoggerConfig *TraceConfig
 }
 
 func (t *Transaction) IsContractCreation() bool {
@@ -115,6 +123,6 @@ func (t *Transaction) IsUnderpriced(priceLimit uint64) bool {
 	return t.GasPrice.Cmp(big.NewInt(0).SetUint64(priceLimit)) < 0
 }
 
-func (t *Transaction) SetLoggerConfig(config *LoggerConfig) {
+func (t *Transaction) SetLoggerConfig(config *TraceConfig) {
 	t.LoggerConfig = config
 }

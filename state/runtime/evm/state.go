@@ -3,6 +3,7 @@ package evm
 import (
 	"errors"
 	"math/big"
+	"reflect"
 	"strings"
 
 	"sync"
@@ -224,7 +225,7 @@ func (c *state) Run() ([]byte, error) {
 	codeSize := len(c.code)
 
 	tracer := c.host.GetTracer()
-	if tracer != nil {
+	if !reflect.ValueOf(tracer).IsNil() {
 		defer func() {
 			if c.err != nil {
 				if !logged {
@@ -236,7 +237,7 @@ func (c *state) Run() ([]byte, error) {
 		}()
 	}
 	for !c.stop {
-		if tracer != nil {
+		if !reflect.ValueOf(tracer).IsNil() {
 			logged = false
 			pcCopy = uint64(c.ip)
 			gasCopy = c.gas
@@ -255,7 +256,7 @@ func (c *state) Run() ([]byte, error) {
 			break
 		}
 
-		if tracer != nil {
+		if !reflect.ValueOf(tracer).IsNil() {
 			cost = inst.gas
 		}
 
@@ -272,12 +273,13 @@ func (c *state) Run() ([]byte, error) {
 			break
 		}
 
-		if tracer != nil {
+		if !reflect.ValueOf(tracer).IsNil() {
 			scope = runtime.ScopeContext{
 				Memory:   c.memory,
 				Stack:    c.stack,
 				Contract: c.msg,
 			}
+
 			tracer.CaptureState(pcCopy, int(op), gasCopy, cost, scope, c.ret, c.msg.Depth, c.err)
 			logged = true
 		}

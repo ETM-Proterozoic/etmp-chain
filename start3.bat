@@ -1,0 +1,1 @@
+go run ./main.go server --data-dir ./test-chain-3 --chain genesis.json --grpc :30000 --libp2p 0.0.0.0:30001 --jsonrpc 0.0.0.0:30002 --seal

@@ -1,3 +1,8 @@
+// Package complete provides a tool for bash writing bash completion in go.
+//
+// Writing bash completion scripts is a hard work. This package provides an easy way
+// to create bash completion scripts for any command, and also an easy way to install/uninstall
+// the completion of the command.
 package complete
 
 import (
@@ -5,16 +10,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/posener/complete/cmd"
+	"github.com/posener/complete/match"
 )
 
 const (
-	envLine  = "COMP_LINE"
-	envPoint = "COMP_POINT"
-	envDebug = "COMP_DEBUG"
+	envComplete = "COMP_LINE"
+	envDebug    = "COMP_DEBUG"
 )
 
 // Complete structs define completion for a command with CLI options
@@ -52,18 +55,13 @@ func (c *Complete) Run() bool {
 // For installation: it assumes that flags were added and parsed before
 // it was called.
 func (c *Complete) Complete() bool {
-	line, point, ok := getEnv()
+	line, ok := getLine()
 	if !ok {
 		// make sure flags parsed,
 		// in case they were not added in the main program
 		return c.CLI.Run()
 	}
-
-	if point >= 0 && point < len(line) {
-		line = line[:point]
-	}
-
-	Log("Completing phrase: %s", line)
+	Log("Completing line: %s", line)
 	a := newArgs(line)
 	Log("Completing last field: %s", a.Last)
 	options := c.Command.Predict(a)
@@ -72,7 +70,7 @@ func (c *Complete) Complete() bool {
 	// filter only options that match the last argument
 	matches := []string{}
 	for _, option := range options {
-		if strings.HasPrefix(option, a.Last) {
+		if match.Prefix(option, a.Last) {
 			matches = append(matches, option)
 		}
 	}
@@ -81,19 +79,12 @@ func (c *Complete) Complete() bool {
 	return true
 }
 
-func getEnv() (line string, point int, ok bool) {
-	line = os.Getenv(envLine)
+func getLine() (string, bool) {
+	line := os.Getenv(envComplete)
 	if line == "" {
-		return
+		return "", false
 	}
-	point, err := strconv.Atoi(os.Getenv(envPoint))
-	if err != nil {
-		// If failed parsing point for some reason, set it to point
-		// on the end of the line.
-		Log("Failed parsing point %s: %v", os.Getenv(envPoint), err)
-		point = len(line)
-	}
-	return line, point, true
+	return line, true
 }
 
 func (c *Complete) output(options []string) {
