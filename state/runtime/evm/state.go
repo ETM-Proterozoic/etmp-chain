@@ -2,6 +2,7 @@ package evm
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -234,6 +235,7 @@ func (c *state) Run() ([]byte, error) {
 		logged  bool   // deferred EVMLogger should ignore already logged steps
 		// res     []byte // result of the opcode execution function
 	)
+
 	// get tracer from host
 	tracer := c.host.GetTracerConfig()
 	if tracer.Debug {
@@ -284,6 +286,7 @@ func (c *state) Run() ([]byte, error) {
 		cost = inst.gas
 		// trace
 		if tracer.Debug {
+			fmt.Println("CaptureState, callContext.Stack ", callContext.Stack.Len())
 			tracer.Tracer.CaptureState(pc, int(op), gasCopy, cost, callContext, c.ret, c.msg.Depth, vmerr)
 			logged = true
 		}

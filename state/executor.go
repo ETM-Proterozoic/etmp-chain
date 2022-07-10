@@ -140,7 +140,6 @@ func (e *Executor) BeginTxn(
 	coinbaseReceiver types.Address,
 ) (*Transition, error) {
 	config := e.config.Forks.At(header.Number)
-	fmt.Printf("parentRoot", parentRoot)
 	auxSnap2, err := e.state.NewSnapshotAt(parentRoot)
 	if err != nil {
 		return nil, err
@@ -240,6 +239,10 @@ type Transition struct {
 	gas         uint64
 	initialGas  uint64
 	traceConfig runtime.TraceConfig
+}
+
+func (t *Transition) GetState() *Txn {
+	return t.state
 }
 
 func (t *Transition) TotalGas() uint64 {
