@@ -159,7 +159,8 @@ func TestTransition_AcceptState_Validator_VerifyCorrect(t *testing.T) {
 	i.setState(AcceptState)
 
 	block := i.DummyBlock()
-	header, err := writeSeal(i.pool.get("A").priv, block.Header)
+	//Todo: mock ibft
+	header, err := (&sign{ibft: &Ibft{}}).writeSeal(i.pool.get("A").priv, block.Header)
 
 	assert.NoError(t, err)
 
@@ -192,7 +193,7 @@ func TestTransition_AcceptState_Validator_VerifyFails(t *testing.T) {
 	block := i.DummyBlock()
 	block.Header.MixHash = types.Hash{} // invalidates the block
 
-	header, err := writeSeal(i.pool.get("A").priv, block.Header)
+	header, err := (&sign{ibft: &Ibft{}}).writeSeal(i.pool.get("A").priv, block.Header)
 
 	assert.NoError(t, err)
 
@@ -689,9 +690,13 @@ func (s *mockSyncer) BulkSyncWithPeer(p *protocol.SyncPeer, handler func(block *
 	return nil
 }
 
-func (s *mockSyncer) WatchSyncWithPeer(p *protocol.SyncPeer, handler func(b *types.Block) bool) {
+func (s *mockSyncer) WatchSyncWithPeer(
+	p *protocol.SyncPeer,
+	newBlockHandler func(b *types.Block) bool,
+	blockTimeout time.Duration,
+) {
 	if s.receivedNewHeadFromPeer != nil {
-		handler(s.receivedNewHeadFromPeer)
+		newBlockHandler(s.receivedNewHeadFromPeer)
 	}
 }
 
@@ -832,6 +837,10 @@ func (m *mockIbft) GetHeaderByNumber(i uint64) (*types.Header, bool) {
 }
 
 func (m *mockIbft) WriteBlock(block *types.Block) error {
+	return nil
+}
+
+func (m *mockIbft) VerifyPotentialBlock(block *types.Block) error {
 	return nil
 }
 

@@ -3,6 +3,7 @@ package ibft
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/0xPolygon/polygon-edge/contracts/staking"
 	stakingHelper "github.com/0xPolygon/polygon-edge/helper/staking"
@@ -15,6 +16,8 @@ type PoSMechanism struct {
 	BaseConsensusMechanism
 	// Params
 	ContractDeployment uint64 // The height when deploying staking contract
+	MaxValidatorCount  uint64
+	MinValidatorCount  uint64
 }
 
 // PoSFactory initializes the required data
@@ -72,6 +75,18 @@ func (pos *PoSMechanism) initializeParams(params *IBFTFork) error {
 		}
 
 		pos.ContractDeployment = params.Deployment.Value
+
+		if params.MaxValidatorCount == nil {
+			pos.MaxValidatorCount = stakingHelper.MaxValidatorCount
+		} else {
+			pos.MaxValidatorCount = params.MaxValidatorCount.Value
+		}
+
+		if params.MinValidatorCount == nil {
+			pos.MinValidatorCount = stakingHelper.MinValidatorCount
+		} else {
+			pos.MinValidatorCount = params.MinValidatorCount.Value
+		}
 	}
 
 	return nil
@@ -146,7 +161,10 @@ func (pos *PoSMechanism) preStateCommitHook(rawParams interface{}) error {
 	}
 
 	// Deploy Staking contract
-	contractState, err := stakingHelper.PredeployStakingSC(nil)
+	contractState, err := stakingHelper.PredeployStakingSC(nil, stakingHelper.PredeployParams{
+		MinValidatorCount: pos.MinValidatorCount,
+		MaxValidatorCount: pos.MaxValidatorCount,
+	})
 	if err != nil {
 		return err
 	}
@@ -194,7 +212,7 @@ func (pos *PoSMechanism) getNextValidators(header *types.Header) (ValidatorSet, 
 		return nil, err
 	}
 
-	return staking.QueryValidators(transition, pos.ibft.validatorKeyAddr)
+	return staking.QueryValidators(transition, pos.ibft.validatorKeyAddr, pos.ibft.blockchain)
 }
 
 // updateSnapshotValidators updates validators in snapshot at given height
@@ -204,7 +222,17 @@ func (pos *PoSMechanism) updateValidators(num uint64) error {
 		return errors.New("header not found")
 	}
 
+	beginTime := time.Now().UnixNano()
 	validators, err := pos.getNextValidators(header)
+	endTime := time.Now().UnixNano()
+	pos.ibft.logger.Info(
+		"query next validators cost time", "", (endTime-beginTime)/1e6,
+	)
+
+	pos.ibft.logger.Info(
+		"query validators ", "info", fmt.Sprintf("arrays: %v", validators),
+	)
+
 	if err != nil {
 		return err
 	}

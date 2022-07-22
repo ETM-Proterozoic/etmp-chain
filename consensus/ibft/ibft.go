@@ -21,7 +21,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/hashicorp/go-hclog"
 	"google.golang.org/grpc"
-	any "google.golang.org/protobuf/types/known/anypb"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -38,6 +38,7 @@ type blockchainInterface interface {
 	Header() *types.Header
 	GetHeaderByNumber(i uint64) (*types.Header, bool)
 	WriteBlock(block *types.Block) error
+	VerifyPotentialBlock(block *types.Block) error
 	CalculateGasLimit(number uint64) (uint64, error)
 }
 
@@ -55,7 +56,7 @@ type syncerInterface interface {
 	Start()
 	BestPeer() *protocol.SyncPeer
 	BulkSyncWithPeer(p *protocol.SyncPeer, newBlockHandler func(block *types.Block)) error
-	WatchSyncWithPeer(p *protocol.SyncPeer, newBlockHandler func(b *types.Block) bool)
+	WatchSyncWithPeer(p *protocol.SyncPeer, newBlockHandler func(b *types.Block) bool, blockTimeout time.Duration)
 	GetSyncProgression() *progress.Progression
 	Broadcast(b *types.Block)
 }
@@ -78,8 +79,9 @@ type Ibft struct {
 
 	txpool txPoolInterface // Reference to the transaction pool
 
-	store     *snapshotStore // Snapshot store that keeps track of all snapshots
-	epochSize uint64
+	store              *snapshotStore // Snapshot store that keeps track of all snapshots
+	epochSize          uint64
+	quorumSizeBlockNum uint64
 
 	msgQueue *msgQueue     // Structure containing different message queues
 	updateCh chan struct{} // Update channel
@@ -133,11 +135,13 @@ func (i *Ibft) runHook(hookName HookType, height uint64, hookParam interface{}) 
 func Factory(
 	params *consensus.ConsensusParams,
 ) (consensus.Consensus, error) {
-	var epochSize uint64
-	if definedEpochSize, ok := params.Config.Config["epochSize"]; !ok {
-		// No epoch size defined, use the default one
-		epochSize = DefaultEpochSize
-	} else {
+	//	defaults for user set fields in genesis
+	var (
+		epochSize          = uint64(DefaultEpochSize)
+		quorumSizeBlockNum = uint64(0)
+	)
+
+	if definedEpochSize, ok := params.Config.Config["epochSize"]; ok {
 		// Epoch size is defined, use the passed in one
 		readSize, ok := definedEpochSize.(float64)
 		if !ok {
@@ -147,21 +151,32 @@ func Factory(
 		epochSize = uint64(readSize)
 	}
 
+	if rawBlockNum, ok := params.Config.Config["quorumSizeBlockNum"]; ok {
+		//	Block number specified for quorum size switch
+		readBlockNum, ok := rawBlockNum.(float64)
+		if !ok {
+			return nil, errors.New("invalid type assertion")
+		}
+
+		quorumSizeBlockNum = uint64(readBlockNum)
+	}
+
 	p := &Ibft{
-		logger:         params.Logger.Named("ibft"),
-		config:         params.Config,
-		Grpc:           params.Grpc,
-		blockchain:     params.Blockchain,
-		executor:       params.Executor,
-		closeCh:        make(chan struct{}),
-		txpool:         params.Txpool,
-		state:          &currentState{},
-		network:        params.Network,
-		epochSize:      epochSize,
-		sealing:        params.Seal,
-		metrics:        params.Metrics,
-		secretsManager: params.SecretsManager,
-		blockTime:      time.Duration(params.BlockTime) * time.Second,
+		logger:             params.Logger.Named("ibft"),
+		config:             params.Config,
+		Grpc:               params.Grpc,
+		blockchain:         params.Blockchain,
+		executor:           params.Executor,
+		closeCh:            make(chan struct{}),
+		txpool:             params.Txpool,
+		state:              &currentState{},
+		network:            params.Network,
+		epochSize:          epochSize,
+		quorumSizeBlockNum: quorumSizeBlockNum,
+		sealing:            params.Seal,
+		metrics:            params.Metrics,
+		secretsManager:     params.SecretsManager,
+		blockTime:          time.Duration(params.BlockTime) * time.Second,
 	}
 
 	// Initialize the mechanism
@@ -353,35 +368,45 @@ func (i *Ibft) createKey() error {
 	i.updateCh = make(chan struct{})
 
 	if i.validatorKey == nil {
-		// Check if the validator key is initialized
-		var key *ecdsa.PrivateKey
 
-		if i.secretsManager.HasSecret(secrets.ValidatorKey) {
-			// The validator key is present in the secrets manager, load it
-			validatorKey, readErr := crypto.ReadConsensusKey(i.secretsManager)
-			if readErr != nil {
-				return fmt.Errorf("unable to read validator key from Secrets Manager, %w", readErr)
+		if i.secretsManager.GetSecretsManagerType() != secrets.AwsKms {
+			// Check if the validator key is initialized
+			var key *ecdsa.PrivateKey
+			if i.secretsManager.HasSecret(secrets.ValidatorKey) {
+				// The validator key is present in the secrets manager, load it
+				validatorKey, readErr := crypto.ReadConsensusKey(i.secretsManager)
+				if readErr != nil {
+					return fmt.Errorf("unable to read validator key from Secrets Manager, %w", readErr)
+				}
+
+				key = validatorKey
+			} else {
+				// The validator key is not present in the secrets manager, generate it
+				validatorKey, validatorKeyEncoded, genErr := crypto.GenerateAndEncodePrivateKey()
+				if genErr != nil {
+					return fmt.Errorf("unable to generate validator key for Secrets Manager, %w", genErr)
+				}
+
+				// Save the key to the secrets manager
+				saveErr := i.secretsManager.SetSecret(secrets.ValidatorKey, validatorKeyEncoded)
+				if saveErr != nil {
+					return fmt.Errorf("unable to save validator key to Secrets Manager, %w", saveErr)
+				}
+
+				key = validatorKey
+
 			}
-
-			key = validatorKey
+			i.validatorKey = key
+			i.validatorKeyAddr = crypto.PubKeyToAddress(&key.PublicKey)
 		} else {
-			// The validator key is not present in the secrets manager, generate it
-			validatorKey, validatorKeyEncoded, genErr := crypto.GenerateAndEncodePrivateKey()
-			if genErr != nil {
-				return fmt.Errorf("unable to generate validator key for Secrets Manager, %w", genErr)
+			//Todo  ToVerify
+			i.validatorKey = &ecdsa.PrivateKey{}
+			info, err := i.secretsManager.GetSecretInfo(secrets.ValidatorKey)
+			if err != nil {
+				return err
 			}
-
-			// Save the key to the secrets manager
-			saveErr := i.secretsManager.SetSecret(secrets.ValidatorKey, validatorKeyEncoded)
-			if saveErr != nil {
-				return fmt.Errorf("unable to save validator key to Secrets Manager, %w", saveErr)
-			}
-
-			key = validatorKey
+			i.validatorKeyAddr = types.StringToAddress(info.Address)
 		}
-
-		i.validatorKey = key
-		i.validatorKeyAddr = crypto.PubKeyToAddress(&key.PublicKey)
 	}
 
 	return nil
@@ -527,7 +552,7 @@ func (i *Ibft) runSyncState() {
 			isValidator = i.isValidSnapshot()
 
 			return isValidator
-		})
+		}, i.blockTime)
 
 		if isValidator {
 			// at this point, we are in sync with the latest chain we know of
@@ -581,9 +606,6 @@ func (i *Ibft) buildBlock(snap *Snapshot, parent *types.Header) (*types.Block, e
 		i.logger.Error(fmt.Sprintf("Unable to run hook %s, %v", CandidateVoteHook, hookErr))
 	}
 
-	// calculate millisecond values from consensus custom functions in utils.go file
-	// to preserve go backward compatibility as time.UnixMili is available as of go 17
-
 	// set the timestamp
 	parentTime := time.Unix(int64(parent.Timestamp), 0)
 	headerTime := parentTime.Add(i.blockTime)
@@ -624,7 +646,8 @@ func (i *Ibft) buildBlock(snap *Snapshot, parent *types.Header) (*types.Block, e
 	})
 
 	// write the seal of the block after all the fields are completed
-	header, err = writeSeal(i.validatorKey, block.Header)
+	sign := &sign{ibft: i}
+	header, err = sign.writeSeal(i.validatorKey, block.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -795,6 +818,7 @@ func (i *Ibft) runAcceptState() { // start new round
 
 		// send the prepare message since we are ready to move the state
 		i.sendPrepareMsg()
+		i.logger.Debug("ibft proposer send prepreparemsg", "number", number)
 
 		// move to validation state for new prepare messages
 		i.setState(ValidateState)
@@ -847,6 +871,14 @@ func (i *Ibft) runAcceptState() { // start new round
 		} else {
 			// since it's a new block, we have to verify it first
 			if err := i.verifyHeaderImpl(snap, parent, block.Header); err != nil {
+				i.logger.Error("block header verification failed", "err", err)
+				i.handleStateErr(errBlockVerificationFailed)
+
+				continue
+			}
+
+			// Verify other block params
+			if err := i.blockchain.VerifyPotentialBlock(block); err != nil {
 				i.logger.Error("block verification failed", "err", err)
 				i.handleStateErr(errBlockVerificationFailed)
 
@@ -867,6 +899,7 @@ func (i *Ibft) runAcceptState() { // start new round
 			i.state.block = block
 			// send prepare message and wait for validations
 			i.sendPrepareMsg()
+			i.logger.Debug("ibft validators send preparemsg", "number", number)
 			i.setState(ValidateState)
 		}
 	}
@@ -916,12 +949,12 @@ func (i *Ibft) runValidateState() {
 			panic(fmt.Sprintf("BUG: %s", reflect.TypeOf(msg.Type)))
 		}
 
-		if i.state.numPrepared() > i.state.NumValid() {
+		if i.state.numPrepared() >= i.quorumSize(i.state.view.Sequence)(i.state.validators) {
 			// we have received enough pre-prepare messages
 			sendCommit()
 		}
 
-		if i.state.numCommitted() > i.state.NumValid() {
+		if i.state.numCommitted() >= i.quorumSize(i.state.view.Sequence)(i.state.validators) {
 			// we have received enough commit messages
 			sendCommit()
 
@@ -969,21 +1002,41 @@ func (i *Ibft) updateMetrics(block *types.Block) {
 	i.metrics.NumTxs.Set(float64(len(block.Body().Transactions)))
 }
 func (i *Ibft) insertBlock(block *types.Block) error {
-	committedSeals := [][]byte{}
+	committedSeals := make([][]byte, 0)
+
 	for _, commit := range i.state.committed {
 		// no need to check the format of seal here because writeCommittedSeals will check
-		committedSeals = append(committedSeals, hex.MustDecodeHex(commit.Seal))
+		committedSeal, decodeErr := hex.DecodeHex(commit.Seal)
+		if decodeErr != nil {
+			i.logger.Error(
+				fmt.Sprintf(
+					"unable to decode committed seal from %s",
+					commit.From,
+				),
+			)
+
+			continue
+		}
+
+		committedSeals = append(committedSeals, committedSeal)
 	}
 
+	// Push the committed seals to the header
 	header, err := writeCommittedSeals(block.Header, committedSeals)
 	if err != nil {
 		return err
 	}
 
-	// we need to recompute the hash since we have change extra-data
+	// The hash needs to be recomputed since the extra data was changed
 	block.Header = header
 	block.Header.ComputeHash()
 
+	// Verify the header only, since the block body is already verified
+	if err := i.VerifyHeader(block.Header); err != nil {
+		return err
+	}
+
+	// Save the block locally
 	if err := i.blockchain.WriteBlock(block); err != nil {
 		return err
 	}
@@ -1102,17 +1155,15 @@ func (i *Ibft) runRoundChangeState() {
 		// we only expect RoundChange messages right now
 		num := i.state.AddRoundMessage(msg)
 
-		if num == i.state.NumValid() {
+		if num == i.state.validators.MaxFaultyNodes()+1 && i.state.view.Round < msg.View.Round {
+			// weak certificate, try to catch up if our round number is smaller
+			// update timer
+			timeout = exponentialTimeout(i.state.view.Round)
+			sendRoundChange(msg.View.Round)
+		} else if num == i.quorumSize(i.state.view.Sequence)(i.state.validators) {
 			// start a new round immediately
 			i.state.view.Round = msg.View.Round
 			i.setState(AcceptState)
-		} else if num == i.state.validators.MaxFaultyNodes()+1 {
-			// weak certificate, try to catch up if our round number is smaller
-			if i.state.view.Round < msg.View.Round {
-				// update timer
-				timeout = exponentialTimeout(i.state.view.Round)
-				sendRoundChange(msg.View.Round)
-			}
 		}
 	}
 }
@@ -1145,14 +1196,15 @@ func (i *Ibft) gossip(typ proto.MessageReq_Type) {
 
 	// if we are sending a preprepare message we need to include the proposed block
 	if msg.Type == proto.MessageReq_Preprepare {
-		msg.Proposal = &any.Any{
+		msg.Proposal = &anypb.Any{
 			Value: i.state.block.MarshalRLP(),
 		}
 	}
 
 	// if the message is commit, we need to add the committed seal
 	if msg.Type == proto.MessageReq_Commit {
-		seal, err := writeCommittedSeal(i.validatorKey, i.state.block.Header)
+		sign := &sign{ibft: i}
+		seal, err := sign.writeCommittedSeal(i.validatorKey, i.state.block.Header)
 		if err != nil {
 			i.logger.Error("failed to commit seal", "err", err)
 
@@ -1168,8 +1220,8 @@ func (i *Ibft) gossip(typ proto.MessageReq_Type) {
 		msg2.From = i.validatorKeyAddr.String()
 		i.pushMessage(msg2)
 	}
-
-	if err := signMsg(i.validatorKey, msg); err != nil {
+	sign := &sign{ibft: i}
+	if err := sign.signMsg(i.validatorKey, msg); err != nil {
 		i.logger.Error("failed to sign message", "err", err)
 
 		return
@@ -1239,7 +1291,15 @@ func (i *Ibft) verifyHeaderImpl(snap *Snapshot, parent, header *types.Header) er
 }
 
 // VerifyHeader wrapper for verifying headers
-func (i *Ibft) VerifyHeader(parent, header *types.Header) error {
+func (i *Ibft) VerifyHeader(header *types.Header) error {
+	parent, ok := i.blockchain.GetHeaderByNumber(header.Number - 1)
+	if !ok {
+		return fmt.Errorf(
+			"unable to get parent header for block number %d",
+			header.Number,
+		)
+	}
+
 	snap, err := i.getSnapshot(parent.Number)
 	if err != nil {
 		return err
@@ -1251,16 +1311,27 @@ func (i *Ibft) VerifyHeader(parent, header *types.Header) error {
 	}
 
 	// verify the committed seals
-	if err := verifyCommitedFields(snap, header); err != nil {
-		return err
-	}
-
-	// process the new block in order to update the snapshot
-	if err := i.processHeaders([]*types.Header{header}); err != nil {
+	if err := verifyCommittedFields(snap, header, i.quorumSize(header.Number)); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+//	quorumSize returns a callback that when executed on a ValidatorSet computes
+//	number of votes required to reach quorum based on the size of the set.
+//	The blockNumber argument indicates which formula was used to calculate the result (see PRs #513, #549)
+func (i *Ibft) quorumSize(blockNumber uint64) QuorumImplementation {
+	if blockNumber < i.quorumSizeBlockNum {
+		return LegacyQuorumSize
+	}
+
+	return OptimalQuorumSize
+}
+
+// ProcessHeaders updates the snapshot based on previously verified headers
+func (i *Ibft) ProcessHeaders(headers []*types.Header) error {
+	return i.processHeaders(headers)
 }
 
 // GetBlockCreator retrieves the block signer from the extra data field

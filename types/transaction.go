@@ -1,18 +1,18 @@
 package types
 
 import (
-	"github.com/0xPolygon/polygon-edge/helper/keccak"
 	"math/big"
 	"sync/atomic"
+
+	"github.com/0xPolygon/polygon-edge/helper/keccak"
 )
 
-// TraceConfig holds extra parameters to trace functions.
-type TraceConfig struct {
-	*LoggerConfig
-	Tracer  *string
-	Timeout *string
-	Reexec  *uint64
-}
+// Transaction types.
+const (
+	LegacyTxType = iota
+	AccessListTxType
+	DynamicFeeTxType
+)
 
 // Config are the configuration options for structured logger the EVM
 type LoggerConfig struct {
@@ -22,6 +22,28 @@ type LoggerConfig struct {
 	EnableReturnData bool // enable return data capture
 	Debug            bool // print output during capture end
 	Limit            int  // maximum length of output, but zero means unlimited
+}
+
+// TxData is the underlying data of a transaction.
+//
+// This is implemented by DynamicFeeTx, LegacyTx and AccessListTx.
+type TxData interface {
+	txType() byte // returns the type ID
+	copy() TxData // creates a deep copy and initializes all fields
+
+	chainID() *big.Int
+	accessList() AccessList
+	data() []byte
+	gas() uint64
+	gasPrice() *big.Int
+	gasTipCap() *big.Int
+	gasFeeCap() *big.Int
+	value() *big.Int
+	nonce() uint64
+	to() *Address
+
+	rawSignatureValues() (v, r, s *big.Int)
+	setSignatureValues(chainID, v, r, s *big.Int)
 }
 
 type Transaction struct {
@@ -40,7 +62,7 @@ type Transaction struct {
 	// Cache
 	size atomic.Value
 
-	LoggerConfig *TraceConfig
+	LoggerConfig *LoggerConfig
 }
 
 func (t *Transaction) IsContractCreation() bool {
@@ -123,6 +145,15 @@ func (t *Transaction) IsUnderpriced(priceLimit uint64) bool {
 	return t.GasPrice.Cmp(big.NewInt(0).SetUint64(priceLimit)) < 0
 }
 
-func (t *Transaction) SetLoggerConfig(config *TraceConfig) {
+func (t *Transaction) SetLoggerConfig(config *LoggerConfig) {
 	t.LoggerConfig = config
+}
+
+// copyAddressPtr copies an address.
+func copyAddressPtr(a *Address) *Address {
+	if a == nil {
+		return nil
+	}
+	cpy := *a
+	return &cpy
 }

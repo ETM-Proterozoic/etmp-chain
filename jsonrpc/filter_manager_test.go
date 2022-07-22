@@ -1,13 +1,159 @@
 package jsonrpc
 
 import (
+	"math/big"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/0xPolygon/polygon-edge/blockchain"
 	"github.com/0xPolygon/polygon-edge/types"
+	"github.com/gorilla/websocket"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 )
+
+func Test_GetLogsForQuery(t *testing.T) {
+	t.Parallel()
+
+	blockHash := types.StringToHash("1")
+
+	// Topics we're searching for
+	topic1 := types.StringToHash("4")
+	topic2 := types.StringToHash("5")
+	topic3 := types.StringToHash("6")
+
+	var topics = [][]types.Hash{{topic1}, {topic2}, {topic3}}
+
+	testTable := []struct {
+		name           string
+		query          *LogQuery
+		expectedLength int
+		expectedError  error
+	}{
+		{
+			"Found matching logs, fromBlock < toBlock",
+			&LogQuery{
+				fromBlock: 1,
+				toBlock:   3,
+				Topics:    topics,
+			},
+			3,
+			nil,
+		},
+		{
+			"Found matching logs, fromBlock == toBlock",
+			&LogQuery{
+				fromBlock: 2,
+				toBlock:   2,
+				Topics:    topics,
+			},
+			1,
+			nil,
+		},
+		{
+			"Found matching logs, BlockHash present",
+			&LogQuery{
+				BlockHash: &blockHash,
+				Topics:    topics,
+			},
+			1,
+			nil,
+		},
+		{
+			"No logs found",
+			&LogQuery{
+				fromBlock: 4,
+				toBlock:   5,
+				Topics:    topics,
+			},
+			0,
+			nil,
+		},
+		{
+			"Invalid block range",
+			&LogQuery{
+				fromBlock: 10,
+				toBlock:   5,
+				Topics:    topics,
+			},
+			0,
+			ErrIncorrectBlockRange,
+		},
+	}
+
+	// setup test
+	store := &mockBlockStore{
+		topics: []types.Hash{topic1, topic2, topic3},
+	}
+	store.setupLogs()
+
+	blocks := make([]*types.Block, 5)
+
+	for i := range blocks {
+		blocks[i] = &types.Block{
+			Header: &types.Header{
+				Number: uint64(i),
+				Hash:   types.StringToHash(strconv.Itoa(i)),
+			},
+			Transactions: []*types.Transaction{
+				{
+					Value: big.NewInt(10),
+				},
+				{
+					Value: big.NewInt(11),
+				},
+				{
+					Value: big.NewInt(12),
+				},
+			},
+		}
+	}
+
+	store.appendBlocksToStore(blocks)
+
+	f := NewFilterManager(hclog.NewNullLogger(), store)
+
+	for _, testCase := range testTable {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			foundLogs, logError := f.GetLogsForQuery(testCase.query)
+
+			if logError != nil && testCase.expectedError == nil {
+				// If there is an error and test isn't expected to fail
+				t.Fatalf("Error: %v", logError)
+			}
+
+			if testCase.expectedError != nil {
+				assert.Lenf(t, foundLogs, testCase.expectedLength, "Invalid number of logs found")
+			}
+
+			assert.ErrorIs(t, logError, testCase.expectedError)
+		})
+	}
+}
+
+func Test_GetLogFilterFromID(t *testing.T) {
+	store := newMockStore()
+
+	m := NewFilterManager(hclog.NewNullLogger(), store)
+
+	go m.Run()
+
+	logFilter := &LogQuery{
+		Addresses: []types.Address{addr1},
+		toBlock:   10,
+		fromBlock: 0,
+	}
+
+	retrivedLogFilter, err := m.GetLogFilterFromID(
+		m.NewLogFilter(logFilter, &MockClosedWSConnection{}),
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, logFilter, retrivedLogFilter.query)
+}
 
 func TestFilterLog(t *testing.T) {
 	store := newMockStore()
@@ -15,7 +161,7 @@ func TestFilterLog(t *testing.T) {
 	m := NewFilterManager(hclog.NewNullLogger(), store)
 	go m.Run()
 
-	id := m.addFilter(&LogFilter{
+	id := m.NewLogFilter(&LogQuery{
 		Topics: [][]types.Hash{
 			{hash1},
 		},
@@ -36,6 +182,7 @@ func TestFilterLog(t *testing.T) {
 								},
 							},
 						},
+						TxHash: hash3,
 					},
 				},
 			},
@@ -54,6 +201,7 @@ func TestFilterLog(t *testing.T) {
 								},
 							},
 						},
+						TxHash: hash3,
 					},
 				},
 			},
@@ -74,7 +222,7 @@ func TestFilterBlock(t *testing.T) {
 	go m.Run()
 
 	// add block filter
-	id := m.addFilter(nil, nil)
+	id := m.NewBlockFilter(nil)
 
 	// emit two events
 	store.emitEvent(&mockEvent{
@@ -137,7 +285,7 @@ func TestFilterTimeout(t *testing.T) {
 	go m.Run()
 
 	// add block filter
-	id := m.addFilter(nil, nil)
+	id := m.NewBlockFilter(nil)
 
 	assert.True(t, m.Exists(id))
 	time.Sleep(3 * time.Second)
@@ -158,7 +306,7 @@ func TestFilterWebsocket(t *testing.T) {
 
 	// we cannot call get filter changes for a websocket filter
 	_, err := m.GetFilterChanges(id)
-	assert.Equal(t, err, errFilterDoesNotExists)
+	assert.Equal(t, err, ErrWSFilterDoesNotSupportGetChanges)
 
 	// emit two events
 	store.emitEvent(&mockEvent{
@@ -208,4 +356,38 @@ func TestHeadStream(t *testing.T) {
 	// there are no new entries
 	updates, _ = next.getUpdates()
 	assert.Len(t, updates, 0)
+}
+
+type MockClosedWSConnection struct{}
+
+func (m *MockClosedWSConnection) WriteMessage(_messageType int, _data []byte) error {
+	return websocket.ErrCloseSent
+}
+
+func TestClosedFilterDeletion(t *testing.T) {
+	store := newMockStore()
+
+	m := NewFilterManager(hclog.NewNullLogger(), store)
+
+	go m.Run()
+
+	// add block filter
+	id := m.NewBlockFilter(&MockClosedWSConnection{})
+
+	assert.True(t, m.Exists(id))
+
+	// event is sent to the filter but writing to connection should fail
+	err := m.dispatchEvent(&blockchain.Event{
+		NewChain: []*types.Header{
+			{
+				Hash: types.StringToHash("1"),
+			},
+		},
+	})
+
+	// should not return error when the error is websocket.ErrCloseSen because filter is removed instead
+	assert.NoError(t, err)
+
+	// false because filter was removed automatically
+	assert.False(t, m.Exists(id))
 }

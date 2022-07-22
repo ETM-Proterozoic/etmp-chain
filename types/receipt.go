@@ -3,6 +3,7 @@ package types
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 
 	goHex "encoding/hex"
 
@@ -29,7 +30,7 @@ type Receipt struct {
 
 	// context fields
 	GasUsed         uint64
-	ContractAddress Address
+	ContractAddress *Address
 	TxHash          Hash
 }
 
@@ -37,10 +38,19 @@ func (r *Receipt) SetStatus(s ReceiptStatus) {
 	r.Status = &s
 }
 
+func (r *Receipt) SetContractAddress(contractAddress Address) {
+	r.ContractAddress = &contractAddress
+}
+
 type Log struct {
-	Address Address
-	Topics  []Hash
-	Data    []byte
+	Address     Address
+	Topics      []Hash
+	Data        []byte
+	BlockNumber uint64 `json:"blockNumber"`
+	// hash of the transaction
+	TxHash Hash `json:"transactionHash" gencodec:"required"`
+	// index of the transaction in the block
+	TxIndex uint `json:"transactionIndex"`
 }
 
 const BloomByteLength = 256
@@ -70,7 +80,11 @@ func (b *Bloom) Scan(src interface{}) error {
 		return errors.New("invalid type assert")
 	}
 
-	bb := hex.MustDecodeHex(string(stringVal))
+	bb, decodeErr := hex.DecodeHex(string(stringVal))
+	if decodeErr != nil {
+		return fmt.Errorf("unable to decode value, %w", decodeErr)
+	}
+
 	copy(b[:], bb[:])
 
 	return nil

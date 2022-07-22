@@ -8,9 +8,15 @@ import (
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/helper/hex"
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
+	"github.com/0xPolygon/polygon-edge/secrets"
+	"github.com/0xPolygon/polygon-edge/secrets/awskms"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/umbracle/fastrlp"
 )
+
+type sign struct {
+	ibft *Ibft
+}
 
 func commitMsg(b []byte) []byte {
 	// message that the nodes need to sign to commit to a block
@@ -42,7 +48,7 @@ func ecrecoverFromHeader(h *types.Header) (types.Address, error) {
 	return ecrecoverImpl(extra.Seal, msg)
 }
 
-func signSealImpl(prv *ecdsa.PrivateKey, h *types.Header, committed bool) ([]byte, error) {
+func (s *sign) signSealImpl(prv *ecdsa.PrivateKey, h *types.Header, committed bool) ([]byte, error) {
 	hash, err := calculateHeaderHash(h)
 	if err != nil {
 		return nil, err
@@ -54,7 +60,10 @@ func signSealImpl(prv *ecdsa.PrivateKey, h *types.Header, committed bool) ([]byt
 		msg = commitMsg(hash)
 	}
 
-	seal, err := crypto.Sign(prv, crypto.Keccak256(msg))
+	//Todo:这里改成通过lamda函数去签名  //通过ibft.secret来传递
+	// seal, err := crypto.Sign(prv, crypto.Keccak256(msg))
+	seal, err := s.Sign(prv, crypto.Keccak256(msg))
+	// add decide  if current choice is aws kms
 
 	if err != nil {
 		return nil, err
@@ -63,9 +72,9 @@ func signSealImpl(prv *ecdsa.PrivateKey, h *types.Header, committed bool) ([]byt
 	return seal, nil
 }
 
-func writeSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types.Header, error) {
+func (s *sign) writeSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types.Header, error) {
 	h = h.Copy()
-	seal, err := signSealImpl(prv, h, false)
+	seal, err := s.signSealImpl(prv, h, false)
 
 	if err != nil {
 		return nil, err
@@ -84,8 +93,8 @@ func writeSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types.Header, error) {
 	return h, nil
 }
 
-func writeCommittedSeal(prv *ecdsa.PrivateKey, h *types.Header) ([]byte, error) {
-	return signSealImpl(prv, h, true)
+func (s *sign) writeCommittedSeal(prv *ecdsa.PrivateKey, h *types.Header) ([]byte, error) {
+	return s.signSealImpl(prv, h, true)
 }
 
 func writeCommittedSeals(h *types.Header, seals [][]byte) (*types.Header, error) {
@@ -164,8 +173,12 @@ func verifySigner(snap *Snapshot, header *types.Header) error {
 	return nil
 }
 
-// verifyCommitedFields is checking for consensus proof in the header
-func verifyCommitedFields(snap *Snapshot, header *types.Header) error {
+// verifyCommittedFields is checking for consensus proof in the header
+func verifyCommittedFields(
+	snap *Snapshot,
+	header *types.Header,
+	quorumSizeFn QuorumImplementation,
+) error {
 	extra, err := getIbftExtra(header)
 	if err != nil {
 		return err
@@ -206,8 +219,10 @@ func verifyCommitedFields(snap *Snapshot, header *types.Header) error {
 	// Valid committed seals must be at least 2F+1
 	// 	2F 	is the required number of honest validators who provided the committed seals
 	// 	+1	is the proposer
-	if validSeals := len(visited); validSeals <= 2*snap.Set.MaxFaultyNodes() {
-		return fmt.Errorf("not enough seals to seal block")
+	if validSeals := len(visited); validSeals < quorumSizeFn(snap.Set) {
+		// TODO
+		fmt.Println("not enough seals to seal block!")
+		// return fmt.Errorf("not enough seals to seal block")
 	}
 
 	return nil
@@ -234,13 +249,14 @@ func validateMsg(msg *proto.MessageReq) error {
 	return nil
 }
 
-func signMsg(key *ecdsa.PrivateKey, msg *proto.MessageReq) error {
+func (s *sign) signMsg(key *ecdsa.PrivateKey, msg *proto.MessageReq) error {
 	signMsg, err := msg.PayloadNoSig()
 	if err != nil {
 		return err
 	}
 
-	sig, err := crypto.Sign(key, crypto.Keccak256(signMsg))
+	// sig, err := crypto.Sign(key, crypto.Keccak256(signMsg))
+	sig, err := s.Sign(key, crypto.Keccak256(signMsg))
 	if err != nil {
 		return err
 	}
@@ -248,4 +264,15 @@ func signMsg(key *ecdsa.PrivateKey, msg *proto.MessageReq) error {
 	msg.Signature = hex.EncodeToHex(sig)
 
 	return nil
+}
+
+func (s *sign) Sign(priv *ecdsa.PrivateKey, hash []byte) ([]byte, error) {
+	k, ok := s.ibft.secretsManager.(*awskms.KmsSecretManager)
+	if ok {
+		//fmt.Println(" By Kms sign approach")
+		return k.SignBySecret(secrets.ValidatorKey, s.ibft.config.Params.ChainID, hash)
+	}
+
+	return crypto.Sign(priv, hash)
+
 }

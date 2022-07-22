@@ -69,6 +69,18 @@ func (f *Forks) IsEIP155(block uint64) bool {
 	return f.active(f.EIP155, block)
 }
 
+func (f *Forks) IsIstanbul(block uint64) bool {
+	return f.active(f.Istanbul, block)
+}
+
+func (f *Forks) IsBerlin(block uint64) bool {
+	return f.active(f.EIP158, block)
+}
+
+func (f *Forks) IsLondon(block uint64) bool {
+	return f.active(f.EIP155, block)
+}
+
 func (f *Forks) At(block uint64) ForksInTime {
 	return ForksInTime{
 		Homestead:      f.active(f.Homestead, block),
@@ -118,4 +130,39 @@ var AllForksEnabled = &Forks{
 	Constantinople: NewFork(0),
 	Petersburg:     NewFork(0),
 	Istanbul:       NewFork(0),
+}
+
+// Rules wraps ChainConfig and is merely syntactic sugar or can be used for functions
+// that do not have or require information about the block.
+//
+// Rules is a one time interface meaning that it shouldn't be used in between transition
+// phases.
+type Rules struct {
+	ChainID                                                 *big.Int
+	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
+	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
+	IsBerlin, IsLondon                                      bool
+	IsMerge                                                 bool
+}
+
+// Rules ensures c's ChainID is not nil.
+func (p *Params) Rules(num uint64, isMerge bool) Rules {
+	chainID := new(big.Int).SetUint64(uint64(p.ChainID))
+	if chainID == nil {
+		chainID = new(big.Int)
+	}
+	return Rules{
+		ChainID:          new(big.Int).Set(chainID),
+		IsHomestead:      p.Forks.IsHomestead(num),
+		IsEIP150:         p.Forks.IsEIP150(num),
+		IsEIP155:         p.Forks.IsEIP155(num),
+		IsEIP158:         p.Forks.IsEIP158(num),
+		IsByzantium:      p.Forks.IsByzantium(num),
+		IsConstantinople: p.Forks.IsConstantinople(num),
+		IsPetersburg:     p.Forks.IsPetersburg(num),
+		IsIstanbul:       p.Forks.IsIstanbul(num),
+		IsBerlin:         p.Forks.IsBerlin(num),
+		IsLondon:         p.Forks.IsLondon(num),
+		IsMerge:          isMerge,
+	}
 }
