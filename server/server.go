@@ -147,6 +147,22 @@ func NewServer(config *Config) (*Server, error) {
 		m.serverMetrics = metricProvider("polygon", config.Chain.Name, false)
 	}
 
+	fmt.Println("pprof address ", config.PprofAddress)
+	// feat:pprof
+	if config.PprofAddress != "" {
+		go func() {
+			logger.Info(
+				"add pprof support ", config.PprofAddress,
+			)
+			err := http.ListenAndServe(config.PprofAddress, nil)
+			if err != nil {
+				logger.Error(
+					"add pprof fail ", err,
+				)
+			}
+		}()
+	}
+
 	// Set up the secrets manager
 	if err := m.setupSecretsManager(); err != nil {
 		return nil, fmt.Errorf("failed to set up the secrets manager: %w", err)

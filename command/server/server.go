@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+
 	"github.com/0xPolygon/polygon-edge/command"
 	"github.com/0xPolygon/polygon-edge/command/server/config"
 	"github.com/0xPolygon/polygon-edge/command/server/export"
@@ -44,6 +45,14 @@ func setFlags(cmd *cobra.Command) {
 		command.LogLevelFlag,
 		defaultConfig.LogLevel,
 		"the log level for console output",
+	)
+
+	//add for http pprof
+	cmd.Flags().StringVar(
+		&params.rawConfig.PprofAddress,
+		command.PprofAddress,
+		defaultConfig.PprofAddress,
+		"the http addr for pprof",
 	)
 
 	cmd.Flags().StringVar(

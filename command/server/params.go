@@ -2,8 +2,9 @@ package server
 
 import (
 	"errors"
-	"github.com/0xPolygon/polygon-edge/command/server/config"
 	"net"
+
+	"github.com/0xPolygon/polygon-edge/command/server/config"
 
 	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/network"
@@ -77,6 +78,7 @@ type serverParams struct {
 	secretsConfig *secrets.SecretsManagerConfig
 
 	logFileLocation string
+	pprofAddress    string
 }
 
 func (p *serverParams) validateFlags() error {
@@ -115,6 +117,10 @@ func (p *serverParams) isDNSAddressSet() bool {
 
 func (p *serverParams) isLogFileLocationSet() bool {
 	return p.rawConfig.LogFilePath != ""
+}
+
+func (p *serverParams) isPprofAddressSet() bool {
+	return p.rawConfig.PprofAddress != ""
 }
 
 func (p *serverParams) isDevConsensus() bool {
@@ -169,5 +175,6 @@ func (p *serverParams) generateConfig() *server.Config {
 		BlockTime:      p.rawConfig.BlockTime,
 		LogLevel:       hclog.LevelFromString(p.rawConfig.LogLevel),
 		LogFilePath:    p.logFileLocation,
+		PprofAddress:   p.pprofAddress,
 	}
 }

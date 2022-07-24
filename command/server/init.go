@@ -3,9 +3,10 @@ package server
 import (
 	"errors"
 	"fmt"
-	"github.com/0xPolygon/polygon-edge/command/server/config"
 	"math"
 	"net"
+
+	"github.com/0xPolygon/polygon-edge/command/server/config"
 
 	"github.com/0xPolygon/polygon-edge/network/common"
 
@@ -82,6 +83,12 @@ func (p *serverParams) initDataDirLocation() error {
 func (p *serverParams) initLogFileLocation() {
 	if p.isLogFileLocationSet() {
 		p.logFileLocation = p.rawConfig.LogFilePath
+	}
+}
+
+func (p *serverParams) initPprofAddress() {
+	if p.isPprofAddressSet() {
+		p.pprofAddress = p.rawConfig.PprofAddress
 	}
 }
 
@@ -222,6 +229,9 @@ func (p *serverParams) initAddresses() error {
 	if err := p.initJSONRPCAddress(); err != nil {
 		return err
 	}
+
+	// feat: pprof init
+	p.initPprofAddress()
 
 	return p.initGRPCAddress()
 }
