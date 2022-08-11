@@ -562,7 +562,7 @@ func (t *Transition) Create2(
 ) *runtime.ExecutionResult {
 	address := crypto.CreateAddress(caller, t.state.GetNonce(caller))
 	contract := runtime.NewContractCreation(1, caller, caller, address, value, gas, code)
-
+	//Todo: toConfirm
 	return t.applyCreate(contract, t, evm.CREATE2)
 }
 
@@ -870,6 +870,7 @@ func (t *Transition) Selfdestruct(addr types.Address, beneficiary types.Address)
 
 func (t *Transition) Callx(c *runtime.Contract, h runtime.Host) *runtime.ExecutionResult {
 	if c.Type == runtime.Create {
+		//Todo: toComfirm
 		return t.applyCreate(c, h, evm.CREATE)
 	}
 

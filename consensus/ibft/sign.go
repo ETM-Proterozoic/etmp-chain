@@ -14,14 +14,15 @@ import (
 	"github.com/umbracle/fastrlp"
 )
 
-type sign struct {
-	ibft *Ibft
-}
+const (
+	// legacyCommitCode is the value that is contained in
+	// legacy committed seals, so it needs to be preserved in order
+	// for new clients to read old committed seals
+	legacyCommitCode = 2
+)
 
-func commitMsg(b []byte) []byte {
-	// message that the nodes need to sign to commit to a block
-	// hash with COMMIT_MSG_CODE which is the same value used in quorum
-	return crypto.Keccak256(b, []byte{byte(proto.MessageReq_Commit)})
+func wrapCommitHash(b []byte) []byte {
+	return crypto.Keccak256(b, []byte{byte(legacyCommitCode)})
 }
 
 func ecrecoverImpl(sig, msg []byte) (types.Address, error) {
@@ -33,22 +34,23 @@ func ecrecoverImpl(sig, msg []byte) (types.Address, error) {
 	return crypto.PubKeyToAddress(pub), nil
 }
 
-func ecrecoverFromHeader(h *types.Header) (types.Address, error) {
+func ecrecoverProposer(h *types.Header) (types.Address, error) {
 	// get the extra part that contains the seal
 	extra, err := getIbftExtra(h)
 	if err != nil {
 		return types.Address{}, err
 	}
-	// get the sig
-	msg, err := calculateHeaderHash(h)
+
+	// Calculate the header hash (keccak of RLP)
+	hash, err := calculateHeaderHash(h)
 	if err != nil {
 		return types.Address{}, err
 	}
 
-	return ecrecoverImpl(extra.Seal, msg)
+	return ecrecoverImpl(extra.ProposerSeal, hash)
 }
 
-func (s *sign) signSealImpl(prv *ecdsa.PrivateKey, h *types.Header, committed bool) ([]byte, error) {
+func signSealImpl(prv *ecdsa.PrivateKey, h *types.Header) ([]byte, error) {
 	hash, err := calculateHeaderHash(h)
 	if err != nil {
 		return nil, err
