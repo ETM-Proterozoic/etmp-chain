@@ -13,6 +13,9 @@ test-chain*
 dist/
 main.exe
 main
+test-chain-1/
+debug-chain-1/
+etmpd.exe
 
 # MacOS Leftovers
 .DS_Store
