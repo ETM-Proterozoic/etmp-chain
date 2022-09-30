@@ -523,7 +523,42 @@ func (j *jsonRPCHub) ApplyTxn(
 	return
 }
 
+func (j *jsonRPCHub) ApplyBlockTxn(
+	parentHeader *types.Header,
+	block *types.Block,
+	hash types.Hash,
+	tracerConfig runtime.TraceConfig,
+) (result *runtime.ExecutionResult, err error) {
+	// dexiang: 执行区块中之前的交易操作
+	blockCreator, err := j.GetConsensus().GetBlockCreator(block.Header)
+	if err != nil {
+		return nil, err
+	}
+	transition, err := j.BeginTxn(parentHeader.StateRoot, block.Header, blockCreator)
+	if err != nil {
+		return 
+	}
+	transition.SetBlock(block)
+
+	var txn *types.Transaction
+	for _, txn = range block.Transactions {
+		if txn.Hash == hash {
+			break
+		}
+		err = transition.Write(txn)
+	}
+	
+	// 设置config
+	transition.SetTracerConfig(tracerConfig)
+	msg := txn.Copy()
+	msg.Gas = txn.Gas
+	result, err = transition.Apply(msg)
+	
+	return
+}
+
 func (j *jsonRPCHub) ApplyMessage(
+	parentHeader *types.Header,
 	header *types.Header,
 	txn *types.Transaction,
 	tracerConfig runtime.TraceConfig,
@@ -534,7 +569,7 @@ func (j *jsonRPCHub) ApplyMessage(
 	}
 
 	// using tracerConfig to capture log
-	transition, err := j.BeginTxnTracer(header.StateRoot, header, blockCreator, tracerConfig)
+	transition, err := j.BeginTxnTracer(parentHeader.StateRoot, header, blockCreator, tracerConfig)
 
 	if err != nil {
 		return

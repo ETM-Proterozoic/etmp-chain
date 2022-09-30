@@ -13,7 +13,9 @@ import (
 
 type debugTraceStore interface {
 	// add new method to handle tracer
-	ApplyMessage(header *types.Header, txn *types.Transaction, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
+	ApplyMessage(parentHeader *types.Header, header *types.Header, txn *types.Transaction, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
+	ApplyBlockTxn(parentHeader *types.Header, block *types.Block, hash types.Hash, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
+
 }
 
 type debugStore interface {
@@ -177,12 +179,12 @@ func (d *Debug) decodeTxn(arg *txnArgs) (*types.Transaction, error) {
 
 // TraceTransaction returns the version of the web3 client (web3_clientVersion)
 func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interface{}, error) {
-	findSealedTx := func() (*types.Transaction, *types.Block, uint64) {
+	findSealedTx := func() (*types.Transaction, *types.Block, *types.Header, int) {
 		// Check the chain state for the transaction
 		blockHash, ok := d.store.ReadTxLookup(hash)
 		if !ok {
 			// Block not found in storage
-			return nil, nil, 0
+			return nil, nil, nil, 0
 		}
 
 		block, ok := d.store.GetBlockByHash(blockHash, true)
@@ -190,20 +192,21 @@ func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interfac
 
 		if !ok {
 			// Block receipts not found in storage
-			return nil, nil, 0
+			return nil, nil, nil, 0
 		}
 
 		// Find the transaction within the block
+		var tmpHeader = parent.Header
 		for txIndx, txn := range block.Transactions {
 			if txn.Hash == hash {
-				return txn, parent, uint64(txIndx)
+				return txn, block, tmpHeader, txIndx
 			}
 		}
 
-		return nil, nil, 0
+		return nil, nil, nil, 0
 	}
 	// get transaction + block(parent)
-	msg, block, txIndx := findSealedTx()
+	msg, block, parentHeader, txIndx := findSealedTx()
 
 	if msg == nil {
 		return nil, fmt.Errorf("hash not found")
@@ -211,7 +214,7 @@ func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interfac
 	// construct tracer
 	txctx := &tracers.Context{
 		BlockHash: block.Hash(),
-		TxIndex:   int(txIndx),
+		TxIndex:   txIndx,
 		TxHash:    hash,
 	}
 
@@ -230,7 +233,8 @@ func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interfac
 
 	txn := msg.Copy()
 	txn.Gas = msg.Gas
-	_, err = d.store.ApplyMessage(block.Header, txn, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
+	parentHeader.GasLimit += txn.Gas        
+	_, err = d.store.ApplyBlockTxn(parentHeader, block, hash, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
 
 	if err != nil {
 		return nil, err
@@ -293,7 +297,7 @@ func (d *Debug) TraceCall(args *txnArgs, blockNrOrHash BlockNumberOrHash, config
 	// The return value of the execution is saved in the transition (returnValue field)
 	txn := transaction.Copy()
 	txn.Gas = transaction.Gas
-	_, err = d.store.ApplyMessage(header, txn, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
+	_, err = d.store.ApplyMessage(header, header, txn, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
 
 	if err != nil {
 		return nil, err

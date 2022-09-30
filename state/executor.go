@@ -383,6 +383,10 @@ func (t *Transition) Block() *types.Block {
 	return t.block
 }
 
+func (t *Transition) SetBlock(block *types.Block) {
+	t.block = block
+}
+
 // Apply applies a new transaction
 func (t *Transition) Apply(msg *types.Transaction) (*runtime.ExecutionResult, error) {
 	s := t.state.Snapshot() //nolint:ifshort
@@ -614,6 +618,10 @@ func (t *Transition) GetTxn() *Txn {
 
 func (t *Transition) GetTracerConfig() runtime.TraceConfig {
 	return t.traceConfig
+}
+
+func (t *Transition) SetTracerConfig(tracerConfig runtime.TraceConfig) {
+	t.traceConfig = tracerConfig
 }
 
 func (t *Transition) applyCall(
