@@ -133,7 +133,7 @@ func NewServer(config *Config) (*Server, error) {
 		grpcServer:         grpc.NewServer(),
 		restoreProgression: progress.NewProgressionWrapper(progress.ChainSyncRestore),
 	}
-
+	fmt.Println("fuck ##########")
 	m.logger.Info("Data dir", "path", config.DataDir)
 
 	// Generate all the paths in the dataDir
@@ -536,7 +536,7 @@ func (j *jsonRPCHub) ApplyBlockTxn(
 	}
 	transition, err := j.BeginTxn(parentHeader.StateRoot, block.Header, blockCreator)
 	if err != nil {
-		return 
+		return
 	}
 	transition.SetBlock(block)
 
@@ -547,13 +547,13 @@ func (j *jsonRPCHub) ApplyBlockTxn(
 		}
 		err = transition.Write(txn)
 	}
-	
+
 	// 设置config
 	transition.SetTracerConfig(tracerConfig)
 	msg := txn.Copy()
 	msg.Gas = txn.Gas
 	result, err = transition.Apply(msg)
-	
+
 	return
 }
 

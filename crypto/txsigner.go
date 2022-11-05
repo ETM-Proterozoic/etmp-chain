@@ -28,11 +28,17 @@ type TxSigner interface {
 }
 
 // NewSigner creates a new signer object (EIP155 or FrontierSigner)
-func NewSigner(forks chain.ForksInTime, chainID uint64) TxSigner {
+func NewSigner(forks chain.ForksInTime, chainID uint64, oldChainID uint64) TxSigner {
 	var signer TxSigner
 
+	fmt.Println(" ----- chainID --- oldChainID ------ ", chainID, oldChainID)
 	if forks.EIP155 {
-		signer = &EIP155Signer{chainID: chainID}
+		ID := chainID
+		if !forks.ChainIDChange { // important chainID change fork
+			fmt.Println(" ----- ChainIDChange ------ ")
+			ID = oldChainID
+		}
+		signer = &EIP155Signer{chainID: ID}
 	} else {
 		signer = &FrontierSigner{}
 	}

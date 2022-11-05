@@ -253,7 +253,7 @@ func (t *Transition) Receipts() []*types.Receipt {
 var emptyFrom = types.Address{}
 
 func (t *Transition) WriteFailedReceipt(txn *types.Transaction) error {
-	signer := crypto.NewSigner(t.config, uint64(t.r.config.ChainID))
+	signer := crypto.NewSigner(t.config, uint64(t.r.config.ChainID), uint64(t.r.config.OldChainID))
 
 	if txn.From == emptyFrom {
 		// Decrypt the from address
@@ -284,7 +284,7 @@ func (t *Transition) WriteFailedReceipt(txn *types.Transaction) error {
 
 // Write writes another transaction to the executor
 func (t *Transition) Write(txn *types.Transaction) error {
-	signer := crypto.NewSigner(t.config, uint64(t.r.config.ChainID))
+	signer := crypto.NewSigner(t.config, uint64(t.r.config.ChainID), uint64(t.r.config.OldChainID))
 
 	var err error
 	if txn.From == emptyFrom {

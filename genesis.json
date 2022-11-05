@@ -45,9 +45,11 @@
             "istanbul": 0,
             "EIP150": 0,
             "EIP158": 0,
-            "EIP155": 0
+            "EIP155": 0,
+            "chainIDChange": 1
         },
-        "chainID": 36,
+        "chainID": 49,
+        "oldchainID":37,
         "engine": {
             "ibft": {
                 "epochSize": 300,

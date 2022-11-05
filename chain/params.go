@@ -8,6 +8,7 @@ import (
 type Params struct {
 	Forks          *Forks                 `json:"forks"`
 	ChainID        int                    `json:"chainID"`
+	OldChainID     int                    `json:"oldChainID"`
 	Engine         map[string]interface{} `json:"engine"`
 	BlockGasTarget uint64                 `json:"blockGasTarget"`
 }
@@ -31,6 +32,7 @@ type Forks struct {
 	EIP150         *Fork `json:"EIP150,omitempty"`
 	EIP158         *Fork `json:"EIP158,omitempty"`
 	EIP155         *Fork `json:"EIP155,omitempty"`
+	ChainIDChange  *Fork `json:"chainIdChange,omitempty"`
 }
 
 func (f *Forks) active(ff *Fork, block uint64) bool {
@@ -69,6 +71,10 @@ func (f *Forks) IsEIP155(block uint64) bool {
 	return f.active(f.EIP155, block)
 }
 
+func (f *Forks) IsChainIDChange(block uint64) bool {
+	return f.active(f.ChainIDChange, block)
+}
+
 func (f *Forks) At(block uint64) ForksInTime {
 	return ForksInTime{
 		Homestead:      f.active(f.Homestead, block),
@@ -79,6 +85,7 @@ func (f *Forks) At(block uint64) ForksInTime {
 		EIP150:         f.active(f.EIP150, block),
 		EIP158:         f.active(f.EIP158, block),
 		EIP155:         f.active(f.EIP155, block),
+		ChainIDChange:  f.active(f.ChainIDChange, block),
 	}
 }
 
@@ -106,7 +113,8 @@ type ForksInTime struct {
 	Istanbul,
 	EIP150,
 	EIP158,
-	EIP155 bool
+	EIP155,
+	ChainIDChange bool
 }
 
 var AllForksEnabled = &Forks{
