@@ -31,13 +31,12 @@ type TxSigner interface {
 func NewSigner(forks chain.ForksInTime, chainID uint64, oldChainID uint64) TxSigner {
 	var signer TxSigner
 
-	fmt.Println(" ----- chainID --- oldChainID ------ ", chainID, oldChainID)
 	if forks.EIP155 {
 		ID := chainID
 		if !forks.ChainIDChange { // important chainID change fork
-			fmt.Println(" ----- ChainIDChange ------ ")
 			ID = oldChainID
 		}
+		fmt.Println(" ----- EIP155Signer ------ ", ID)
 		signer = &EIP155Signer{chainID: ID}
 	} else {
 		signer = &FrontierSigner{}
