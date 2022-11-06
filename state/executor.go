@@ -140,6 +140,7 @@ func (e *Executor) BeginTxn(
 	coinbaseReceiver types.Address,
 ) (*Transition, error) {
 	config := e.config.Forks.At(header.Number)
+	fmt.Printf(" headerNumer : %d,  chainIDChange: %t \n", header.Number, config.ChainIDChange)
 
 	auxSnap2, err := e.state.NewSnapshotAt(parentRoot)
 	if err != nil {
