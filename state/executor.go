@@ -149,6 +149,7 @@ func (e *Executor) BeginTxn(
 
 	newTxn := NewTxn(e.state, auxSnap2)
 
+	// fork chainID change
 	ChainID := e.config.ChainID
 	if !config.ChainIDChange {
 		ChainID = e.config.OldChainID
@@ -196,13 +197,19 @@ func (e *Executor) BeginTxnTracer(
 
 	newTxn := NewTxn(e.state, auxSnap2)
 
+	// fork chainID change
+	ChainID := e.config.ChainID
+	if !config.ChainIDChange {
+		ChainID = e.config.OldChainID
+	}
+
 	env2 := runtime.TxContext{
 		Coinbase:   coinbaseReceiver,
 		Timestamp:  int64(header.Timestamp),
 		Number:     int64(header.Number),
 		Difficulty: types.BytesToHash(new(big.Int).SetUint64(header.Difficulty).Bytes()),
 		GasLimit:   int64(header.GasLimit),
-		ChainID:    int64(e.config.ChainID),
+		ChainID:    int64(ChainID),
 	}
 
 	txn := &Transition{

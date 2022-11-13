@@ -36,7 +36,6 @@ func NewSigner(forks chain.ForksInTime, chainID uint64, oldChainID uint64) TxSig
 		if !forks.ChainIDChange { // important chainID change fork
 			ID = oldChainID
 		}
-		fmt.Println(" ----- EIP155Signer ------ ", ID)
 		signer = &EIP155Signer{chainID: ID}
 	} else {
 		signer = &FrontierSigner{}

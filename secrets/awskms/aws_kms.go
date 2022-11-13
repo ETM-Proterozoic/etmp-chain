@@ -47,9 +47,6 @@ type KmsSecretManager struct {
 
 	// init phase, cache the validator address
 	validatorAddress string
-
-	// chainId
-	ChainID int
 }
 
 // SecretsManagerFactory implements the factory method
@@ -102,8 +99,6 @@ func SecretsManagerFactory(
 	if err != nil {
 		return nil, err
 	}
-
-	// chainId =
 
 	return kmsManager, nil
 }
@@ -184,31 +179,6 @@ func (k *KmsSecretManager) RemoveSecret(name string) error {
 
 // Sign data by key
 func (k *KmsSecretManager) SignBySecret(key string, chainId int, data []byte) ([]byte, error) {
-
-	var round uint64 = 0
-	var sign []byte
-	var err error
-	for {
-		sign, err = k.SignBySecretOnce(key, chainId, data)
-		if err == nil {
-			break
-		}
-
-		timeout := exponentialTimeout(round)
-		//wait
-		<-time.After(timeout)
-		round = round + 1
-		k.logger.Info(
-			"kms sign retry ", "round", round,
-		)
-
-	}
-
-	return sign, err
-}
-
-// signle sign
-func (k *KmsSecretManager) SignBySecretOnce(key string, chainId int, data []byte) ([]byte, error) {
 	type SignRaw struct {
 		KmsKeyId string     `json:"kms_key_id"`
 		Data     types.Hash `json:"data"`
