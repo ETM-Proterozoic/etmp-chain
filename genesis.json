@@ -46,10 +46,10 @@
             "EIP150": 0,
             "EIP158": 0,
             "EIP155": 0,
-            "chainIDChange": 1
+            "chainIDChange":3994354
         },
-        "chainID": 49,
-        "oldchainID":37,
+        "chainID": 48,
+        "oldChainID": 36,
         "engine": {
             "ibft": {
                 "epochSize": 300,
@@ -59,7 +59,9 @@
         "blockGasTarget": 0
     },
     "bootnodes": [
-        "/ip4/52.69.88.246/tcp/8546/p2p/16Uiu2HAmStE6JPMExeGQthDuVSYMsmDGHFHDbUr7vhiViLR6Lt5Q",
-        "/ip4/35.75.126.134/tcp/8546/p2p/16Uiu2HAmF2pSeEvxad3CAt2wPrwaXyDAjKYpBfcwq6w1kUd2YPht"
+        "/ip4/54.249.229.182/tcp/10001/p2p/16Uiu2HAm5Kz7wPvdd2qAyrMFGsKqWsG7rDBvgAVHqMbMYDquJsbQ",
+        "/ip4/35.75.229.198/tcp/10001/p2p/16Uiu2HAm2yY9DG7KLqdRBASuX3wego1fdqa1yNgPT8uEMks3ypyB",
+        "/ip4/52.3.188.251/tcp/10001/p2p/16Uiu2HAm6sCSWkafpxPDn4De6MfEEh24WBnSoHfLA38nmQW4nsXT",
+        "/ip4/18.157.136.218/tcp/10001/p2p/16Uiu2HAmB23bwsaDLHWsH7fK2HbSyT3VNUHmcWY7UeQ7idd1Kwdy"
     ]
 }
