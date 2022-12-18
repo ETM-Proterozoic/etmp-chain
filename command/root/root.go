@@ -2,6 +2,8 @@ package root
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/0xPolygon/polygon-edge/command/backup"
 	"github.com/0xPolygon/polygon-edge/command/genesis"
 	"github.com/0xPolygon/polygon-edge/command/helper"
@@ -15,8 +17,8 @@ import (
 	"github.com/0xPolygon/polygon-edge/command/status"
 	"github.com/0xPolygon/polygon-edge/command/txpool"
 	"github.com/0xPolygon/polygon-edge/command/version"
+	"github.com/0xPolygon/polygon-edge/command/whitelist"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 type RootCommand struct {
@@ -50,6 +52,7 @@ func (rc *RootCommand) registerSubCommands() {
 		backup.GetCommand(),
 		genesis.GetCommand(),
 		server.GetCommand(),
+		whitelist.GetCommand(),
 		license.GetCommand(),
 	)
 }

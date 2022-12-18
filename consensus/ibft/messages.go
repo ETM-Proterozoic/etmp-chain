@@ -14,8 +14,7 @@ func (i *backendIBFT) signMessage(msg *protoIBFT.Message) *protoIBFT.Message {
 		return nil
 	}
 
-	s := sign{ibft: i}
-	sig, err := s.Sign(i.validatorKey, crypto.Keccak256(raw))
+	sig, err := crypto.Sign(i.validatorKey, crypto.Keccak256(raw))
 	if err != nil {
 		return nil
 	}
@@ -69,8 +68,7 @@ func (i *backendIBFT) BuildPrepareMessage(proposalHash []byte, view *protoIBFT.V
 }
 
 func (i *backendIBFT) BuildCommitMessage(proposalHash []byte, view *protoIBFT.View) *protoIBFT.Message {
-	s := &sign{ibft: i}
-	seal, err := s.writeCommittedSeal(i.validatorKey, proposalHash)
+	seal, err := writeCommittedSeal(i.validatorKey, proposalHash)
 	if err != nil {
 		i.logger.Error("Unable to build commit message, %v", err)
 

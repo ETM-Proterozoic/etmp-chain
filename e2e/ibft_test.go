@@ -16,10 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-/**
-	TestIbft_Transfer sends a transfer transaction (EOA -> EOA)
-	and verifies it was mined
-**/
+// TestIbft_Transfer sends a transfer transaction (EOA -> EOA)
+// and verifies it was mined
 func TestIbft_Transfer(t *testing.T) {
 	testCases := []struct {
 		name            string
@@ -50,7 +48,6 @@ func TestIbft_Transfer(t *testing.T) {
 				IBFTDirPrefix,
 				func(i int, config *framework.TestServerConfig) {
 					config.Premine(senderAddr, framework.EthToWei(10))
-					config.SetSeal(true)
 					config.SetBlockTime(tc.blockTime)
 					config.SetIBFTBaseTimeout(tc.ibftBaseTimeout)
 				},
@@ -77,7 +74,7 @@ func TestIbft_Transfer(t *testing.T) {
 			ctxForTx, cancelTx := context.WithTimeout(context.Background(), txTimeout)
 			defer cancelTx()
 
-			//	send tx and wait for receipt
+			// send tx and wait for receipt
 			receipt, err := ibftManager.
 				GetServer(0).
 				SendRawTx(ctxForTx, txn, senderKey)
@@ -121,7 +118,6 @@ func TestIbft_TransactionFeeRecipient(t *testing.T) {
 				IBFTDirPrefix,
 				func(i int, config *framework.TestServerConfig) {
 					config.Premine(senderAddr, framework.EthToWei(10))
-					config.SetSeal(true)
 				})
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

@@ -60,6 +60,8 @@ require (
 	lukechampine.com/blake3 v1.1.7 // indirect
 )
 
+require github.com/0xPolygon/go-ibft v0.0.0-20220810095021-e43142f8d267
+
 require (
 	github.com/0xPolygon/go-ibft v0.0.0-20220810095021-e43142f8d267
 	github.com/dop251/goja v0.0.0-20220815083517-0c74f9139fd6

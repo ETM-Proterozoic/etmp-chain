@@ -61,6 +61,8 @@ func Factory(
 
 // Initialize initializes the consensus
 func (d *Dev) Initialize() error {
+	d.txpool.SetSealing(true)
+
 	return nil
 }
 
@@ -125,9 +127,9 @@ func (d *Dev) writeTransactions(gasLimit uint64, transition transitionInterface)
 		}
 
 		if err := transition.Write(tx); err != nil {
-			if _, ok := err.(*state.GasLimitReachedTransitionApplicationError); ok { // nolint:errorlint
+			if _, ok := err.(*state.GasLimitReachedTransitionApplicationError); ok { //nolint:errorlint
 				break
-			} else if appErr, ok := err.(*state.TransitionApplicationError); ok && appErr.IsRecoverable { // nolint:errorlint
+			} else if appErr, ok := err.(*state.TransitionApplicationError); ok && appErr.IsRecoverable { //nolint:errorlint
 				d.txpool.Demote(tx)
 			} else {
 				d.txpool.Drop(tx)

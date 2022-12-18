@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	ibftOp "github.com/0xPolygon/polygon-edge/consensus/ibft/proto"
-	"github.com/umbracle/ethgo"
 	"math/big"
 	"strconv"
 	"testing"
 	"time"
+
+	ibftOp "github.com/0xPolygon/polygon-edge/consensus/ibft/proto"
+	"github.com/umbracle/ethgo"
 
 	"github.com/0xPolygon/polygon-edge/contracts/staking"
 	"github.com/0xPolygon/polygon-edge/crypto"
@@ -112,7 +113,6 @@ func TestPoS_ValidatorBoundaries(t *testing.T) {
 		numGenesisValidators,
 		IBFTDirPrefix,
 		func(i int, config *framework.TestServerConfig) {
-			config.SetSeal(true)
 			config.SetEpochSize(2)
 			config.PremineValidatorBalance(defaultBalance)
 			for j := 0; j < numNewStakers; j++ {
@@ -174,7 +174,6 @@ func TestPoS_Stake(t *testing.T) {
 		numGenesisValidators,
 		IBFTDirPrefix,
 		func(i int, config *framework.TestServerConfig) {
-			config.SetSeal(true)
 			config.SetEpochSize(2) // Need to leave room for the endblock
 			config.PremineValidatorBalance(defaultBalance)
 			config.Premine(stakerAddr, defaultBalance)
@@ -235,7 +234,6 @@ func TestPoS_Unstake(t *testing.T) {
 		IBFTDirPrefix,
 		func(i int, config *framework.TestServerConfig) {
 			// Premine to send unstake transaction
-			config.SetSeal(true)
 			config.SetEpochSize(2) // Need to leave room for the endblock
 			config.PremineValidatorBalance(defaultBalance)
 			config.SetIBFTPoS(true)
@@ -323,7 +321,6 @@ func TestPoS_UnstakeExploit(t *testing.T) {
 	// Set up the test server
 	srvs := framework.NewTestServers(t, 1, func(config *framework.TestServerConfig) {
 		config.SetConsensus(framework.ConsensusDev)
-		config.SetSeal(true)
 		config.SetDevInterval(devInterval)
 		config.Premine(senderAddr, defaultBalance)
 		config.SetDevStakingAddresses(append(generateStakingAddresses(numDummyValidators), senderAddr))
@@ -467,7 +464,6 @@ func TestPoS_StakeUnstakeExploit(t *testing.T) {
 	// Set up the test server
 	srvs := framework.NewTestServers(t, 1, func(config *framework.TestServerConfig) {
 		config.SetConsensus(framework.ConsensusDev)
-		config.SetSeal(true)
 		config.SetDevInterval(devInterval)
 		config.Premine(senderAddr, defaultBalance)
 		config.SetBlockLimit(blockGasLimit)
@@ -608,7 +604,6 @@ func TestPoS_StakeUnstakeWithinSameBlock(t *testing.T) {
 	// Set up the test server
 	srvs := framework.NewTestServers(t, 1, func(config *framework.TestServerConfig) {
 		config.SetConsensus(framework.ConsensusDev)
-		config.SetSeal(true)
 		config.SetDevInterval(devInterval)
 		config.Premine(senderAddr, defaultBalance)
 		config.SetBlockLimit(blockGasLimit)
@@ -750,8 +745,6 @@ func TestSnapshotUpdating(t *testing.T) {
 		totalServers,
 		IBFTDirPrefix,
 		func(i int, config *framework.TestServerConfig) {
-			config.SetSeal(i < numGenesisValidators)
-
 			if i < numGenesisValidators {
 				// Only IBFTMinNodes should be validators
 				config.PremineValidatorBalance(defaultBalance)
@@ -761,6 +754,7 @@ func TestSnapshotUpdating(t *testing.T) {
 				config.SetIBFTDirPrefix(dirPrefix)
 				config.SetIBFTDir(fmt.Sprintf("%s%d", dirPrefix, i))
 			}
+
 			config.SetEpochSize(epochSize)
 			config.Premine(faucetAddr, defaultBalance)
 			config.SetIBFTPoS(true)
