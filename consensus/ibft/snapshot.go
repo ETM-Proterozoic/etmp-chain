@@ -13,8 +13,6 @@ import (
 
 	lru "github.com/hashicorp/golang-lru"
 
-	lru "github.com/hashicorp/golang-lru"
-
 	"github.com/0xPolygon/polygon-edge/consensus/ibft/proto"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/hashicorp/go-hclog"

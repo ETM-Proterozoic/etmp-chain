@@ -487,14 +487,6 @@ func (f *FilterManager) getFilterByID(filterID string) filter {
 	return f.filters[filterID]
 }
 
-// getFilterByID fetches the filter by the ID
-func (f *FilterManager) getFilterByID(filterID string) filter {
-	f.RLock()
-	defer f.RUnlock()
-
-	return f.filters[filterID]
-}
-
 // GetLogFilterFromID return log filter for given filterID
 func (f *FilterManager) GetLogFilterFromID(filterID string) (*logFilter, error) {
 	filterRaw := f.getFilterByID(filterID)
