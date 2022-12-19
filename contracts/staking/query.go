@@ -1,7 +1,6 @@
 package staking
 
 import (
-	"encoding/binary"
 	"errors"
 	"math/big"
 
@@ -72,41 +71,29 @@ func createCallViewTx(
 }
 
 // DecodeValidators parses contract call result and returns array of address
-func QueryValidators(t TxQueryHandler, from types.Address) ([]types.Address, error) {
-	method, ok := abis.StakingABI.Methods[methodValidators]
-	if !ok {
-		return nil, ErrMethodNotFoundInABI
-	}
-
-	res, err := t.Apply(createCallViewTx(
-		from,
-		AddrStakingContract,
-		method.ID(),
-		t.GetNonce(from),
-	))
-
+func DecodeValidators(method *abi.Method, returnValue []byte) ([]types.Address, error) {
+	decodedResults, err := method.Outputs.Decode(returnValue)
 	if err != nil {
 		return nil, err
 	}
 
-	if res.Failed() {
-		return nil, res.Err
+	results, ok := decodedResults.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("failed type assertion from decodedResults to map")
 	}
 
-	return DecodeValidators(method, res.ReturnValue)
-}
+	web3Addresses, ok := results["0"].([]ethgo.Address)
 
-type TxQueryHandler interface {
-	Apply(*types.Transaction) (*runtime.ExecutionResult, error)
-	GetNonce(types.Address) uint64
-}
+	if !ok {
+		return nil, errors.New("failed type assertion from results[0] to []ethgo.Address")
+	}
 
-type StoreInterface interface {
-}
+	addresses := make([]types.Address, len(web3Addresses))
+	for idx, waddr := range web3Addresses {
+		addresses[idx] = types.Address(waddr)
+	}
 
-type BlockChainStoreQueryHandler interface {
-	// Header returns the current header of the chain (genesis if empty)
-	Header() *types.Header
+	return addresses, nil
 }
 
 // QueryValidators is a helper function to get validator addresses from contract
@@ -131,72 +118,7 @@ func QueryValidators(t TxQueryHandler, from types.Address) ([]types.Address, err
 		return nil, res.Err
 	}
 
-	addrs, err := DecodeValidators(method, res.ReturnValue)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(addrs) == 0 {
-		return []types.Address{}, nil
-	}
-
-	u := NewUpHash(len(addrs))
-	headHash := store.Header().Hash //get latest block from the chain
-	factor := int64(binary.BigEndian.Uint64(headHash.Bytes()))
-	resultSeqs, err := u.GenHash(factor)
-	if err != nil {
-		return nil, err
-	}
-
-	realAddr := make([]types.Address, len(addrs))
-	for idx, v := range resultSeqs {
-		realAddr[idx] = addrs[v]
-	}
-
-	return realAddr, nil
-}
-
-// decodeBLSPublicKeys parses contract call result and returns array of bytes
-func decodeBLSPublicKeys(
-	method *abi.Method,
-	returnValue []byte,
-) ([][]byte, error) {
-	decodedResults, err := method.Outputs.Decode(returnValue)
-	if err != nil {
-		return nil, err
-	}
-
-	blsPublicKeys, err := decodeWeb3ArrayOfBytes(decodedResults)
-	if err != nil {
-		return nil, err
-	}
-
-	return blsPublicKeys, nil
-}
-
-// QueryBLSPublicKeys is a helper function to get BLS Public Keys from contract
-func QueryBLSPublicKeys(t TxQueryHandler, from types.Address) ([][]byte, error) {
-	method, ok := abis.StakingABI.Methods[methodValidatorBLSPublicKeys]
-	if !ok {
-		return nil, ErrMethodNotFoundInABI
-	}
-
-	res, err := t.Apply(createCallViewTx(
-		from,
-		AddrStakingContract,
-		method.ID(),
-		t.GetNonce(from),
-	))
-
-	if err != nil {
-		return nil, err
-	}
-
-	if res.Failed() {
-		return nil, res.Err
-	}
-
-	return decodeBLSPublicKeys(method, res.ReturnValue)
+	return DecodeValidators(method, res.ReturnValue)
 }
 
 // decodeBLSPublicKeys parses contract call result and returns array of bytes

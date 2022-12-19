@@ -2,8 +2,10 @@ package helper
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/0xPolygon/polygon-edge/crypto"
+	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/network"
 	"github.com/0xPolygon/polygon-edge/secrets"
 	"github.com/0xPolygon/polygon-edge/secrets/awskms"
@@ -91,26 +93,6 @@ func SetupAwsKms(
 			},
 		},
 	)
-}
-
-func InitValidatorKey(secretsManager secrets.SecretsManager) (*ecdsa.PrivateKey, error) {
-	// Generate the IBFT validator private key
-	validatorKey, validatorKeyEncoded, keyErr := crypto.GenerateAndEncodePrivateKey()
-	if keyErr != nil {
-		return nil, keyErr
-	}
-
-	address := crypto.PubKeyToAddress(&validatorKey.PublicKey)
-
-	// Write the validator private key to the secrets manager storage
-	if setErr := secretsManager.SetSecret(
-		secrets.ValidatorKey,
-		validatorKeyEncoded,
-	); setErr != nil {
-		return types.ZeroAddress, setErr
-	}
-
-	return address, nil
 }
 
 // InitECDSAValidatorKey creates new ECDSA key and set as a validator key
