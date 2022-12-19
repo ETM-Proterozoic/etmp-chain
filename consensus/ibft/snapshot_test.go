@@ -2,16 +2,14 @@ package ibft
 
 import (
 	"crypto/ecdsa"
-	"github.com/0xPolygon/polygon-edge/consensus"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
 
-	"github.com/0xPolygon/polygon-edge/consensus"
-
 	"github.com/0xPolygon/polygon-edge/blockchain"
 	"github.com/0xPolygon/polygon-edge/chain"
+	"github.com/0xPolygon/polygon-edge/consensus"
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/types"
