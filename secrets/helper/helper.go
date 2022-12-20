@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/0xPolygon/polygon-edge/crypto"
+	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/helper/hex"
 	"github.com/0xPolygon/polygon-edge/network"
 	"github.com/0xPolygon/polygon-edge/secrets"
@@ -265,7 +266,7 @@ func InitCloudSecretsManager(secretsConfig *secrets.SecretsManagerConfig, dataDi
 	case secrets.AwsKms:
 		AwsKms, err := SetupAwsKms(secretsConfig, dataDir)
 		if err != nil {
-			return err
+			return secretsManager, err
 		}
 
 		secretsManager = AwsKms

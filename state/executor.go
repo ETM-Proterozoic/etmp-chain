@@ -181,7 +181,7 @@ func (e *Executor) BeginTxn(
 
 type Transition struct {
 	logger hclog.Logger
-
+	r      *Executor
 	// dummy
 	auxState State
 	snap     Snapshot
@@ -476,6 +476,7 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 	t.ctx.GasPrice = types.BytesToHash(gasPrice.Bytes())
 	t.ctx.Origin = msg.From
 
+	var result *runtime.ExecutionResult
 	if msg.IsContractCreation() {
 		result = t.Create2(msg.From, msg.Input, value, gasLeft)
 	} else {
@@ -680,6 +681,8 @@ func (t *Transition) applyCreate(c *runtime.Contract, host runtime.Host, op evm.
 			Err:     runtime.ErrMaxCodeSizeExceeded,
 		}
 	}
+
+	gasCost := uint64(len(result.ReturnValue)) * 200
 
 	if result.GasLeft < gasCost {
 		result.Err = runtime.ErrCodeStoreOutOfGas

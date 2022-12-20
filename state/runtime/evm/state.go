@@ -263,17 +263,6 @@ func (c *state) Run() ([]byte, error) {
 		// execute the instruction
 		inst.inst(c)
 
-		if tracer.Debug {
-			// update scopecontext
-			mem.UpdateMemory(c.memory, c.lastGasCost) // bound memory
-			stack.UpdateStack(c.stack, c.sp)          // local stack
-			callContext = &runtime.ScopeContext{
-				Memory:   mem,
-				Stack:    stack,
-				Contract: c.msg,
-			}
-		}
-
 		// check if stack size exceeds the max size
 		if c.sp > stackSize {
 			c.exit(errStackOverflow)
