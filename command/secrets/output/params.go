@@ -85,7 +85,7 @@ func (op *outputParams) initSecretsManager() error {
 			return err
 		}
 
-		op.secretsManager, err = helper.InitCloudSecretsManager(op.secretsConfig)
+		op.secretsManager, err = helper.InitCloudSecretsManager(op.secretsConfig, op.dataDir)
 
 		return err
 	}
