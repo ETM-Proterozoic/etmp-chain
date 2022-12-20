@@ -1,7 +1,6 @@
 package crypto
 
 import (
-	"fmt"
 	"math/big"
 	"os"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/0xPolygon/polygon-edge/helper/hex"
 	"github.com/0xPolygon/polygon-edge/types"
-	"github.com/0xPolygon/polygon-edge/types/hexutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -256,44 +254,4 @@ func TestPrivateKeyGeneration(t *testing.T) {
 
 	assert.True(t, writtenKey.Equal(readKey))
 	assert.Equal(t, writtenAddress.String(), readAddress.String())
-}
-
-func TestPrivToPub(t *testing.T) {
-	privKey := "0123456789012345678901234567890123456789012345678901234567890123"
-	privateKey, err := BytesToPrivateKey([]byte(privKey))
-	if err != nil {
-		t.Fatalf("Unable to parse private key, %v", err)
-	}
-
-	address, err := GetAddressFromKey(privateKey)
-	if err != nil {
-		t.Fatalf("unable to extract key, %v", err)
-	}
-
-	fmt.Println("address ------ ", address)
-}
-
-func TestSign(t *testing.T) {
-	privKey := "0123456789012345678901234567890123456789012345678901234567890123"
-	privateKey, err := BytesToPrivateKey([]byte(privKey))
-	if err != nil {
-		t.Fatalf("Unable to parse private key, %v", err)
-	}
-
-	// h := []byte{6}
-	s := "hello world"
-	fmt.Println("bytes: ", hex.EncodeToString([]byte((s))))
-	sig, _ := Sign(privateKey, []byte(s))
-	fmt.Println("sign ------ ", hexutil.Encode(sig))
-
-	// pub, err := RecoverPubkey(sig, []byte(s))
-
-	pub, err := SigToPub([]byte(s), sig)
-	if err != nil {
-		t.Fatal("recover fail ", err)
-	}
-
-	addr := PubKeyToAddress(pub)
-	fmt.Println("addr ", addr) // "0x14791697260E4c9A71f18484C9f997B308e59325"
-
 }
