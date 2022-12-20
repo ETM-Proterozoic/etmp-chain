@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xPolygon/polygon-edge/command/genesis/predeploy"
+
 	"github.com/0xPolygon/polygon-edge/command"
 	"github.com/0xPolygon/polygon-edge/command/genesis"
 	ibftSwitch "github.com/0xPolygon/polygon-edge/command/ibft/switch"
@@ -42,6 +44,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/umbracle/ethgo"
 	"github.com/umbracle/ethgo/jsonrpc"
+	"github.com/umbracle/ethgo/wallet"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -58,8 +61,9 @@ const (
 type TestServer struct {
 	t *testing.T
 
-	Config *TestServerConfig
-	cmd    *exec.Cmd
+	Config  *TestServerConfig
+	cmd     *exec.Cmd
+	chainID *big.Int
 }
 
 func NewTestServer(t *testing.T, rootDir string, callback TestServerConfigCallback) *TestServer {
@@ -190,9 +194,9 @@ func (t *TestServer) SecretsInit() (*InitIBFTResult, error) {
 
 	commandSlice := strings.Split(fmt.Sprintf("secrets %s", secretsInitCmd.Use), " ")
 	args = append(args, commandSlice...)
-	args = append(args, "--data-dir", t.Config.IBFTDir)
+	args = append(args, "--data-dir", filepath.Join(t.Config.IBFTDir, "tmp"))
 
-	cmd := exec.Command(binaryName, args...)
+	cmd := exec.Command(resolveBinary(), args...) //nolint:gosec
 	cmd.Dir = t.Config.RootDir
 
 	if _, err := cmd.Output(); err != nil {
@@ -333,14 +337,51 @@ func (t *TestServer) GenerateGenesis() error {
 	blockGasLimit := strconv.FormatUint(t.Config.BlockGasLimit, 10)
 	args = append(args, "--block-gas-limit", blockGasLimit)
 
-	cmd := exec.Command(binaryName, args...)
+	cmd := exec.Command(resolveBinary(), args...) //nolint:gosec
 	cmd.Dir = t.Config.RootDir
 
-	if t.Config.ShowsLog {
-		stdout := io.Writer(os.Stdout)
-		cmd.Stdout = stdout
-		cmd.Stderr = stdout
+	stdout := t.GetStdout()
+	cmd.Stdout = stdout
+	cmd.Stderr = stdout
+
+	return cmd.Run()
+}
+
+func (t *TestServer) GenesisPredeploy() error {
+	if t.Config.PredeployParams == nil {
+		// No need to predeploy anything
+		return nil
 	}
+
+	genesisPredeployCmd := predeploy.GetCommand()
+	args := make([]string, 0)
+
+	commandSlice := strings.Split(fmt.Sprintf("genesis %s", genesisPredeployCmd.Use), " ")
+
+	args = append(args, commandSlice...)
+
+	// Add the path to the genesis file
+	args = append(args, "--chain", filepath.Join(t.Config.RootDir, "genesis.json"))
+
+	// Add predeploy address
+	if t.Config.PredeployParams.PredeployAddress != "" {
+		args = append(args, "--predeploy-address", t.Config.PredeployParams.PredeployAddress)
+	}
+
+	// Add constructor arguments, if any
+	for _, constructorArg := range t.Config.PredeployParams.ConstructorArgs {
+		args = append(args, "--constructor-args", constructorArg)
+	}
+
+	// Add the path to the artifacts file
+	args = append(args, "--artifacts-path", t.Config.PredeployParams.ArtifactsPath)
+
+	cmd := exec.Command(resolveBinary(), args...) //nolint:gosec
+	cmd.Dir = t.Config.RootDir
+
+	stdout := t.GetStdout()
+	cmd.Stdout = stdout
+	cmd.Stderr = stdout
 
 	return cmd.Run()
 }
@@ -377,7 +418,7 @@ func (t *TestServer) Start(ctx context.Context) error {
 		args = append(args, "--price-limit", strconv.FormatUint(*t.Config.PriceLimit, 10))
 	}
 
-	if t.Config.ShowsLog {
+	if t.Config.ShowsLog || t.Config.SaveLogs {
 		args = append(args, "--log-level", "debug")
 	}
 
@@ -397,14 +438,12 @@ func (t *TestServer) Start(ctx context.Context) error {
 	t.ReleaseReservedPorts()
 
 	// Start the server
-	t.cmd = exec.Command(binaryName, args...)
+	t.cmd = exec.Command(resolveBinary(), args...) //nolint:gosec
 	t.cmd.Dir = t.Config.RootDir
 
-	if t.Config.ShowsLog {
-		stdout := io.Writer(os.Stdout)
-		t.cmd.Stdout = stdout
-		t.cmd.Stderr = stdout
-	}
+	stdout := t.GetStdout()
+	t.cmd.Stdout = stdout
+	t.cmd.Stderr = stdout
 
 	if err := t.cmd.Start(); err != nil {
 		return err
@@ -420,8 +459,19 @@ func (t *TestServer) Start(ctx context.Context) error {
 
 		return nil, false
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	// query the chain id
+	chainID, err := t.JSONRPC().Eth().ChainID()
+	if err != nil {
+		return err
+	}
+
+	t.chainID = chainID
+
+	return nil
 }
 
 func (t *TestServer) SwitchIBFTType(typ fork.IBFTType, from uint64, to, deployment *uint64) error {
@@ -452,14 +502,12 @@ func (t *TestServer) SwitchIBFTType(typ fork.IBFTType, from uint64, to, deployme
 	}
 
 	// Start the server
-	t.cmd = exec.Command(binaryName, args...)
+	t.cmd = exec.Command(resolveBinary(), args...) //nolint:gosec
 	t.cmd.Dir = t.Config.RootDir
 
-	if t.Config.ShowsLog {
-		stdout := io.Writer(os.Stdout)
-		t.cmd.Stdout = stdout
-		t.cmd.Stderr = stdout
-	}
+	stdout := t.GetStdout()
+	t.cmd.Stdout = stdout
+	t.cmd.Stderr = stdout
 
 	return t.cmd.Run()
 }
@@ -513,6 +561,171 @@ type PreparedTransaction struct {
 	To       *types.Address
 	Value    *big.Int
 	Input    []byte
+}
+
+type Txn struct {
+	key     *wallet.Key
+	client  *jsonrpc.Eth
+	hash    *ethgo.Hash
+	receipt *ethgo.Receipt
+	raw     *ethgo.Transaction
+	chainID *big.Int
+
+	sendErr error
+	waitErr error
+}
+
+func (t *Txn) Deploy(input []byte) *Txn {
+	t.raw.Input = input
+
+	return t
+}
+
+func (t *Txn) Transfer(to ethgo.Address, value *big.Int) *Txn {
+	t.raw.To = &to
+	t.raw.Value = value
+
+	return t
+}
+
+func (t *Txn) Value(value *big.Int) *Txn {
+	t.raw.Value = value
+
+	return t
+}
+
+func (t *Txn) To(to ethgo.Address) *Txn {
+	t.raw.To = &to
+
+	return t
+}
+
+func (t *Txn) GasLimit(gas uint64) *Txn {
+	t.raw.Gas = gas
+
+	return t
+}
+
+func (t *Txn) GasPrice(price uint64) *Txn {
+	t.raw.GasPrice = price
+
+	return t
+}
+
+func (t *Txn) Nonce(nonce uint64) *Txn {
+	t.raw.Nonce = nonce
+
+	return t
+}
+
+func (t *Txn) sendImpl() error {
+	// populate default values
+	t.raw.Gas = 1048576
+	t.raw.GasPrice = 1048576
+
+	if t.raw.Nonce == 0 {
+		nextNonce, err := t.client.GetNonce(t.key.Address(), ethgo.Latest)
+		if err != nil {
+			return fmt.Errorf("failed to get nonce: %w", err)
+		}
+
+		t.raw.Nonce = nextNonce
+	}
+
+	signer := wallet.NewEIP155Signer(t.chainID.Uint64())
+
+	signedTxn, err := signer.SignTx(t.raw, t.key)
+	if err != nil {
+		return err
+	}
+
+	data, _ := signedTxn.MarshalRLPTo(nil)
+
+	txHash, err := t.client.SendRawTransaction(data)
+	if err != nil {
+		return fmt.Errorf("failed to send transaction: %w", err)
+	}
+
+	t.hash = &txHash
+
+	return nil
+}
+
+func (t *Txn) Send() *Txn {
+	if t.hash != nil {
+		panic("BUG: txn already sent")
+	}
+
+	t.sendErr = t.sendImpl()
+
+	return t
+}
+
+func (t *Txn) Receipt() *ethgo.Receipt {
+	return t.receipt
+}
+
+//nolint:thelper
+func (t *Txn) NoFail(tt *testing.T) {
+	t.Wait()
+
+	if t.sendErr != nil {
+		tt.Fatal(t.sendErr)
+	}
+
+	if t.waitErr != nil {
+		tt.Fatal(t.waitErr)
+	}
+
+	if t.receipt.Status != 1 {
+		tt.Fatal("txn failed with status 0")
+	}
+}
+
+func (t *Txn) Complete() bool {
+	if t.sendErr != nil {
+		// txn failed during sending
+		return true
+	}
+
+	if t.waitErr != nil {
+		// txn failed during waiting
+		return true
+	}
+
+	if t.receipt != nil {
+		// txn was mined
+		return true
+	}
+
+	return false
+}
+
+func (t *Txn) Wait() {
+	if t.Complete() {
+		return
+	}
+
+	ctx, cancelFn := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer cancelFn()
+
+	receipt, err := tests.WaitForReceipt(ctx, t.client, *t.hash)
+	if err != nil {
+		t.waitErr = err
+	} else {
+		t.receipt = receipt
+	}
+}
+
+func (t *TestServer) Txn(key *wallet.Key) *Txn {
+	tt := &Txn{
+		key:     key,
+		client:  t.JSONRPC().Eth(),
+		chainID: t.chainID,
+		raw:     &ethgo.Transaction{},
+	}
+
+	return tt
 }
 
 // SendRawTx signs the transaction with the provided private key, executes it, and returns the receipt
@@ -711,4 +924,44 @@ func (t *TestServer) CallJSONRPC(req map[string]interface{}) map[string]interfac
 	}
 
 	return result
+}
+
+// GetStdout returns the combined stdout writers of the server
+func (t *TestServer) GetStdout() io.Writer {
+	writers := []io.Writer{}
+
+	if t.Config.SaveLogs {
+		f, err := os.OpenFile(filepath.Join(t.Config.LogsDir, t.Config.Name+".log"), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0660)
+		if err != nil {
+			t.t.Fatal(err)
+		}
+
+		writers = append(writers, f)
+
+		t.t.Cleanup(func() {
+			err = f.Close()
+			if err != nil {
+				t.t.Logf("Failed to close file. Error: %s", err)
+			}
+		})
+	}
+
+	if t.Config.ShowsLog {
+		writers = append(writers, os.Stdout)
+	}
+
+	if len(writers) == 0 {
+		return io.Discard
+	}
+
+	return io.MultiWriter(writers...)
+}
+
+func resolveBinary() string {
+	bin := os.Getenv("EDGE_BINARY")
+	if bin != "" {
+		return bin
+	}
+	// fallback
+	return binaryName
 }

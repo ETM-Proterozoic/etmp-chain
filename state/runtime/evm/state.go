@@ -72,7 +72,8 @@ type state struct {
 	err  error
 	stop bool
 
-	gas uint64
+	gas                uint64
+	currentConsumedGas uint64
 
 	// bitvec bitvec
 	bitmap bitmap
@@ -85,6 +86,7 @@ func (c *state) reset() {
 	c.sp = 0
 	c.ip = 0
 	c.gas = 0
+	c.currentConsumedGas = 0
 	c.lastGasCost = 0
 	c.stop = false
 	c.err = nil
@@ -97,6 +99,7 @@ func (c *state) reset() {
 		c.memory[i] = 0
 	}
 
+	c.stack = c.stack[:0]
 	c.tmp = c.tmp[:0]
 	c.ret = c.ret[:0]
 	c.code = c.code[:0]
@@ -113,7 +116,7 @@ func (c *state) validJumpdest(dest *big.Int) bool {
 	return c.bitmap.isSet(uint(udest))
 }
 
-func (c *state) halt() {
+func (c *state) Halt() {
 	c.stop = true
 }
 
@@ -193,6 +196,8 @@ func (c *state) swap(n int) {
 }
 
 func (c *state) consumeGas(gas uint64) bool {
+	c.currentConsumedGas += gas
+
 	if c.gas < gas {
 		c.exit(errOutOfGas)
 
@@ -211,80 +216,49 @@ func (c *state) resetReturnData() {
 // Run executes the virtual machine
 func (c *state) Run() ([]byte, error) {
 	var (
-		vmerr       error
-		op          OpCode                                         // current opcode
-		mem         = runtime.NewMemoryII(c.memory, c.lastGasCost) // bound memory
-		stack       = runtime.NewStack()                           // local stack
-		callContext = &runtime.ScopeContext{
-			Memory:   mem,
-			Stack:    stack,
-			Contract: c.msg,
-		}
-		// For optimisation reason we're using uint64 as the program counter.
-		// It's theoretically possible to go above 2^64. The YP defines the PC
-		// to be uint256. Practically much less so feasible.
-		pc   = uint64(0) // program counter
-		cost uint64
-		// copies used by tracer
-		pcCopy  uint64 // needed for the deferred EVMLogger
-		gasCopy uint64 // for EVMLogger to log gas remaining before execution
-		logged  bool   // deferred EVMLogger should ignore already logged steps
-		// res     []byte // result of the opcode execution function
+		vmerr error
+
+		op OpCode
+		ok bool
 	)
 
-	// get tracer from host
-	tracer := c.host.GetTracerConfig()
-	if tracer.Debug {
-		defer func() {
-			if vmerr != nil {
-				if !logged {
-					tracer.Tracer.CaptureState(pcCopy, int(op), gasCopy, cost, callContext, c.ret, c.msg.Depth, vmerr)
-				} else {
-					tracer.Tracer.CaptureFault(pcCopy, int(op), gasCopy, cost, callContext, c.msg.Depth, vmerr)
-				}
-			}
-		}()
-	}
-
-	codeSize := len(c.code)
 	for !c.stop {
-		if tracer.Debug {
-			logged, pc, gasCopy = false, uint64(c.ip), c.gas
-			pcCopy = pc
-		}
-		if c.ip >= codeSize {
-			c.halt()
-			logged = true
+		op, ok = c.CurrentOpCode()
+		gasCopy := c.gas
+
+		c.captureState(int(op))
+
+		if !ok {
+			c.Halt()
+
 			break
 		}
-
-		op := OpCode(c.code[c.ip])
 
 		inst := dispatchTable[op]
 		if inst.inst == nil {
 			c.exit(errOpCodeNotFound)
+			c.captureExecutionError(op.String(), c.ip, gasCopy)
 
 			break
 		}
+
 		// check if the depth of the stack is enough for the instruction
 		if c.sp < inst.stack {
 			c.exit(errStackUnderflow)
+			c.captureExecutionError(op.String(), c.ip, gasCopy)
 
 			break
 		}
+
 		// consume the gas of the instruction
 		if !c.consumeGas(inst.gas) {
 			c.exit(errOutOfGas)
+			c.captureExecutionError(op.String(), c.ip, gasCopy)
 
 			break
 		}
 
-		cost = inst.gas
-		// trace
-		if tracer.Debug {
-			tracer.Tracer.CaptureState(pc, int(op), gasCopy, cost, callContext, c.ret, c.msg.Depth, vmerr)
-			logged = true
-		}
+		c.captureSuccessfulExecution(op.String(), gasCopy)
 
 		// execute the instruction
 		inst.inst(c)
@@ -306,6 +280,7 @@ func (c *state) Run() ([]byte, error) {
 
 			break
 		}
+
 		c.ip++
 	}
 
@@ -328,15 +303,18 @@ func (c *state) Len() int {
 	return len(c.memory)
 }
 
-func (c *state) checkMemory(offset, size *big.Int) bool {
-	if size.Sign() == 0 {
-		return true
-	}
-
+// allocateMemory allocates memory to enable accessing in the range of [offset, offset+size]
+// throws error if the given offset and size are negative
+// consumes gas if memory needs to be expanded
+func (c *state) allocateMemory(offset, size *big.Int) bool {
 	if !offset.IsUint64() || !size.IsUint64() {
 		c.exit(errGasUintOverflow)
 
 		return false
+	}
+
+	if size.Sign() == 0 {
+		return true
 	}
 
 	o := offset.Uint64()
@@ -348,7 +326,7 @@ func (c *state) checkMemory(offset, size *big.Int) bool {
 		return false
 	}
 
-	if newSize, m := o+s, uint64(len(c.memory)); m < newSize {
+	if newSize, currentSize := o+s, uint64(len(c.memory)); currentSize < newSize {
 		w := (newSize + 31) / 32
 		newCost := 3*w + w*w/512
 		cost := newCost - c.lastGasCost
@@ -381,7 +359,7 @@ func (c *state) get2(dst []byte, offset, length *big.Int) ([]byte, bool) {
 		return nil, true
 	}
 
-	if !c.checkMemory(offset, length) {
+	if !c.allocateMemory(offset, length) {
 		return nil, false
 	}
 
@@ -406,4 +384,76 @@ func (c *state) Show() string {
 	}
 
 	return strings.Join(str, "\n")
+}
+
+func (c *state) CurrentOpCode() (OpCode, bool) {
+	if codeSize := len(c.code); c.ip >= codeSize {
+		return STOP, false
+	}
+
+	return OpCode(c.code[c.ip]), true
+}
+
+func (c *state) captureState(opCode int) {
+	tracer := c.host.GetTracer()
+	if tracer == nil {
+		return
+	}
+
+	tracer.CaptureState(
+		c.memory,
+		c.stack,
+		opCode,
+		c.msg.Address,
+		c.sp,
+		c.host,
+		c,
+	)
+}
+
+func (c *state) captureSuccessfulExecution(
+	opCode string,
+	gas uint64,
+) {
+	tracer := c.host.GetTracer()
+
+	if tracer == nil {
+		return
+	}
+
+	tracer.ExecuteState(
+		c.msg.Address,
+		uint64(c.ip),
+		opCode,
+		gas,
+		c.currentConsumedGas,
+		c.returnData,
+		c.msg.Depth,
+		c.err,
+		c.host,
+	)
+}
+
+func (c *state) captureExecutionError(
+	opCode string,
+	ip int,
+	gas uint64,
+) {
+	tracer := c.host.GetTracer()
+
+	if tracer == nil {
+		return
+	}
+
+	tracer.ExecuteState(
+		c.msg.Address,
+		uint64(ip),
+		opCode,
+		gas,
+		c.currentConsumedGas,
+		c.returnData,
+		c.msg.Depth,
+		c.err,
+		c.host,
+	)
 }

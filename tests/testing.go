@@ -228,7 +228,7 @@ func buildState(
 	s := itrie.NewState(itrie.NewMemoryStorage())
 	snap := s.NewSnapshot()
 
-	txn := state.NewTxn(s, snap)
+	txn := state.NewTxn(snap)
 
 	for addr, alloc := range allocs {
 		txn.CreateAccount(addr)
@@ -244,7 +244,8 @@ func buildState(
 		}
 	}
 
-	snap, root := txn.Commit(false)
+	objs := txn.Commit(false)
+	snap, root := snap.Commit(objs)
 
 	return s, snap, types.BytesToHash(root)
 }

@@ -1,27 +1,64 @@
 package jsonrpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"math/big"
+	"time"
 
-	"github.com/0xPolygon/polygon-edge/state/runtime"
-	"github.com/0xPolygon/polygon-edge/tracers"
-	"github.com/0xPolygon/polygon-edge/tracers/logger"
+	"github.com/0xPolygon/polygon-edge/helper/hex"
+	"github.com/0xPolygon/polygon-edge/state/runtime/tracer"
+	"github.com/0xPolygon/polygon-edge/state/runtime/tracer/structtracer"
 	"github.com/0xPolygon/polygon-edge/types"
 )
 
-type debugTraceStore interface {
-	// add new method to handle tracer
-	ApplyMessage(parentHeader *types.Header, header *types.Header, txn *types.Transaction, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
-	ApplyBlockTxn(parentHeader *types.Header, block *types.Block, hash types.Hash, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
+var (
+	defaultTraceTimeout = 5 * time.Second
 
+	// ErrExecutionTimeout indicates the execution was terminated due to timeout
+	ErrExecutionTimeout = errors.New("execution timeout")
+	// ErrTraceGenesisBlock is an error returned when tracing genesis block which can't be traced
+	ErrTraceGenesisBlock = errors.New("genesis is not traceable")
+)
+
+type debugBlockchainStore interface {
+	// Header returns the current header of the chain (genesis if empty)
+	Header() *types.Header
+
+	// GetHeaderByNumber gets a header using the provided number
+	GetHeaderByNumber(uint64) (*types.Header, bool)
+
+	// ReadTxLookup returns a block hash in which a given txn was mined
+	ReadTxLookup(txnHash types.Hash) (types.Hash, bool)
+
+	// GetBlockByHash gets a block using the provided hash
+	GetBlockByHash(hash types.Hash, full bool) (*types.Block, bool)
+
+	// GetBlockByNumber gets a block using the provided height
+	GetBlockByNumber(num uint64, full bool) (*types.Block, bool)
+
+	// TraceBlock traces all transactions in the given block
+	TraceBlock(*types.Block, tracer.Tracer) ([]interface{}, error)
+
+	// TraceTxn traces a transaction in the block, associated with the given hash
+	TraceTxn(*types.Block, types.Hash, tracer.Tracer) (interface{}, error)
+
+	// TraceCall traces a single call at the point when the given header is mined
+	TraceCall(*types.Transaction, *types.Header, tracer.Tracer) (interface{}, error)
+}
+
+type debugTxPoolStore interface {
+	GetNonce(types.Address) uint64
+}
+
+type debugStateStore interface {
+	GetAccount(root types.Hash, addr types.Address) (*Account, error)
 }
 
 type debugStore interface {
-	// inherit some methods of ethStore
-	ethStore
-	debugTraceStore
+	debugBlockchainStore
+	debugTxPoolStore
+	debugStateStore
 }
 
 // Debug is the debug jsonrpc endpoint
@@ -29,280 +66,165 @@ type Debug struct {
 	store debugStore
 }
 
-// TraceConfig holds extra parameters to trace functions.
 type TraceConfig struct {
-	*logger.Config
-	Tracer  *string
-	Timeout *string
-	Reexec  *uint64
+	EnableMemory     bool    `json:"enableMemory"`
+	DisableStack     bool    `json:"disableStack"`
+	DisableStorage   bool    `json:"disableStorage"`
+	EnableReturnData bool    `json:"enableReturnData"`
+	Timeout          *string `json:"timeout"`
 }
 
-func (d *Debug) getBlockHeader(number BlockNumber) (*types.Header, error) {
-	switch number {
-	case LatestBlockNumber:
-		return d.store.Header(), nil
-
-	case EarliestBlockNumber:
-		header, ok := d.store.GetHeaderByNumber(uint64(0))
-		if !ok {
-			return nil, fmt.Errorf("error fetching genesis block header")
-		}
-
-		return header, nil
-
-	case PendingBlockNumber:
-		return nil, fmt.Errorf("fetching the pending header is not supported")
-
-	default:
-		// Convert the block number from hex to uint64
-		header, ok := d.store.GetHeaderByNumber(uint64(number))
-		if !ok {
-			return nil, fmt.Errorf("error fetching block number %d header", uint64(number))
-		}
-
-		return header, nil
-	}
-}
-
-func (d *Debug) getHeaderFromBlockNumberOrHash(bnh *BlockNumberOrHash) (*types.Header, error) {
-	var (
-		header *types.Header
-		err    error
-	)
-
-	if bnh.BlockNumber != nil {
-		header, err = d.getBlockHeader(*bnh.BlockNumber)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get the header of block %d: %w", *bnh.BlockNumber, err)
-		}
-	} else if bnh.BlockHash != nil {
-		block, ok := d.store.GetBlockByHash(*bnh.BlockHash, false)
-		if !ok {
-			return nil, fmt.Errorf("could not find block referenced by the hash %s", bnh.BlockHash.String())
-		}
-
-		header = block.Header
-	}
-
-	return header, nil
-}
-
-// getNextNonce returns the next nonce for the account for the specified block
-func (d *Debug) getNextNonce(address types.Address, number BlockNumber) (uint64, error) {
-	if number == PendingBlockNumber {
-		// Grab the latest pending nonce from the TxPool
-		//
-		// If the account is not initialized in the local TxPool,
-		// return the latest nonce from the world state
-		res := d.store.GetNonce(address)
-
-		return res, nil
-	}
-
-	header, err := d.getBlockHeader(number)
+func (d *Debug) TraceBlockByNumber(
+	blockNumber BlockNumber,
+	config *TraceConfig,
+) (interface{}, error) {
+	num, err := GetNumericBlockNumber(blockNumber, d.store)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	acc, err := d.store.GetAccount(header.StateRoot, address)
-
-	if errors.As(err, &ErrStateNotFound) {
-		// If the account doesn't exist / isn't initialized,
-		// return a nonce value of 0
-		return 0, nil
-	} else if err != nil {
-		return 0, err
+	block, ok := d.store.GetBlockByNumber(num, true)
+	if !ok {
+		return nil, fmt.Errorf("block %d not found", num)
 	}
 
-	return acc.Nonce, nil
+	return d.traceBlock(block, config)
 }
 
-func (d *Debug) decodeTxn(arg *txnArgs) (*types.Transaction, error) {
-	// set default values
-	if arg.From == nil {
-		arg.From = &types.ZeroAddress
-		arg.Nonce = argUintPtr(0)
-	} else if arg.Nonce == nil {
-		// get nonce from the pool
-		nonce, err := d.getNextNonce(*arg.From, LatestBlockNumber)
-		if err != nil {
-			return nil, err
-		}
-		arg.Nonce = argUintPtr(nonce)
+func (d *Debug) TraceBlockByHash(
+	blockHash types.Hash,
+	config *TraceConfig,
+) (interface{}, error) {
+	block, ok := d.store.GetBlockByHash(blockHash, true)
+	if !ok {
+		return nil, fmt.Errorf("block %s not found", blockHash)
 	}
 
-	if arg.Value == nil {
-		arg.Value = argBytesPtr([]byte{})
-	}
-
-	if arg.GasPrice == nil {
-		arg.GasPrice = argBytesPtr([]byte{})
-	}
-
-	var input []byte
-	if arg.Data != nil {
-		input = *arg.Data
-	} else if arg.Input != nil {
-		input = *arg.Input
-	}
-
-	if arg.To == nil {
-		if input == nil {
-			return nil, fmt.Errorf("contract creation without data provided")
-		}
-	}
-
-	if input == nil {
-		input = []byte{}
-	}
-
-	if arg.Gas == nil {
-		arg.Gas = argUintPtr(0)
-	}
-
-	txn := &types.Transaction{
-		From:     *arg.From,
-		Gas:      uint64(*arg.Gas),
-		GasPrice: new(big.Int).SetBytes(*arg.GasPrice),
-		Value:    new(big.Int).SetBytes(*arg.Value),
-		Input:    input,
-		Nonce:    uint64(*arg.Nonce),
-	}
-	if arg.To != nil {
-		txn.To = arg.To
-	}
-
-	txn.ComputeHash()
-
-	return txn, nil
+	return d.traceBlock(block, config)
 }
 
-// TraceTransaction returns the version of the web3 client (web3_clientVersion)
-func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interface{}, error) {
-	findSealedTx := func() (*types.Transaction, *types.Block, *types.Header, int) {
-		// Check the chain state for the transaction
-		blockHash, ok := d.store.ReadTxLookup(hash)
-		if !ok {
-			// Block not found in storage
-			return nil, nil, nil, 0
-		}
-
-		block, ok := d.store.GetBlockByHash(blockHash, true)
-		parent, ok := d.store.GetBlockByNumber(block.Number()-1, false)
-
-		if !ok {
-			// Block receipts not found in storage
-			return nil, nil, nil, 0
-		}
-
-		// Find the transaction within the block
-		var tmpHeader = parent.Header
-		for txIndx, txn := range block.Transactions {
-			if txn.Hash == hash {
-				return txn, block, tmpHeader, txIndx
-			}
-		}
-
-		return nil, nil, nil, 0
-	}
-	// get transaction + block(parent)
-	msg, block, parentHeader, txIndx := findSealedTx()
-
-	if msg == nil {
-		return nil, fmt.Errorf("hash not found")
-	}
-	// construct tracer
-	txctx := &tracers.Context{
-		BlockHash: block.Hash(),
-		TxIndex:   txIndx,
-		TxHash:    hash,
+func (d *Debug) TraceBlock(
+	input string,
+	config *TraceConfig,
+) (interface{}, error) {
+	blockByte, decodeErr := hex.DecodeHex(input)
+	if decodeErr != nil {
+		return nil, fmt.Errorf("unable to decode block, %w", decodeErr)
 	}
 
-	var tracer tracers.Tracer
-	var err error
-	if config == nil {
-		config = &TraceConfig{}
-	}
-	tracer = logger.NewStructLogger(config.Config)
-	if config.Tracer != nil {
-		tracer, err = tracers.New(*config.Tracer, txctx)
-		if err != nil {
-			return nil, err
-		}
+	block := &types.Block{}
+	if err := block.UnmarshalRLP(blockByte); err != nil {
+		return nil, err
 	}
 
-	txn := msg.Copy()
-	txn.Gas = msg.Gas
-	parentHeader.GasLimit += txn.Gas        
-	_, err = d.store.ApplyBlockTxn(parentHeader, block, hash, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
+	return d.traceBlock(block, config)
+}
+
+func (d *Debug) TraceTransaction(
+	txHash types.Hash,
+	config *TraceConfig,
+) (interface{}, error) {
+	tx, block := GetTxAndBlockByTxHash(txHash, d.store)
+	if tx == nil {
+		return nil, fmt.Errorf("tx %s not found", txHash.String())
+	}
+
+	if block.Number() == 0 {
+		return nil, ErrTraceGenesisBlock
+	}
+
+	tracer, cancel, err := newTracer(config)
+	defer cancel()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return tracer.GetResult()
+	return d.store.TraceTxn(block, tx.Hash, tracer)
 }
 
-// TraceCall lets you trace a given eth_call. It collects the structured logs
-// created during the execution of EVM if the given transaction was added on
-// top of the provided block and returns them as a JSON object.
-// You can provide -2 as a block number to trace on top of the pending block.
-func (d *Debug) TraceCall(args *txnArgs, blockNrOrHash BlockNumberOrHash, config *TraceConfig) (interface{}, error) {
-	var (
-		header *types.Header
-		err    error
-	)
-
-	// The filter is empty, use the latest block by default
-	if blockNrOrHash.BlockNumber == nil && blockNrOrHash.BlockHash == nil {
-		blockNrOrHash.BlockNumber, _ = createBlockNumberPointer("latest")
-	}
-
-	header, err = d.getHeaderFromBlockNumberOrHash(&blockNrOrHash)
+func (d *Debug) TraceCall(
+	arg *txnArgs,
+	filter BlockNumberOrHash,
+	config *TraceConfig,
+) (interface{}, error) {
+	header, err := GetHeaderFromBlockNumberOrHash(filter, d.store)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get header from block hash or block number")
+		return nil, ErrHeaderNotFound
 	}
 
-	transaction, err := d.decodeTxn(args)
-
+	tx, err := DecodeTxn(arg, d.store)
 	if err != nil {
 		return nil, err
 	}
+
 	// If the caller didn't supply the gas limit in the message, then we set it to maximum possible => block gas limit
-	if transaction.Gas == 0 {
-		transaction.Gas = header.GasLimit
+	if tx.Gas == 0 {
+		tx.Gas = header.GasLimit
 	}
 
-	var traceConfig *TraceConfig
-	if config != nil {
-		traceConfig = &TraceConfig{
-			Config:  config.Config,
-			Tracer:  config.Tracer,
-			Timeout: config.Timeout,
-			Reexec:  config.Reexec,
-		}
-	}
-	if traceConfig == nil {
-		traceConfig = &TraceConfig{}
-	}
-
-	var tracer tracers.Tracer
-	tracer = logger.NewStructLogger(traceConfig.Config)
-	if traceConfig.Tracer != nil {
-		tracer, err = tracers.New(*traceConfig.Tracer, new(tracers.Context))
-		if err != nil {
-			return nil, err
-		}
-	}
-	// The return value of the execution is saved in the transition (returnValue field)
-	txn := transaction.Copy()
-	txn.Gas = transaction.Gas
-	_, err = d.store.ApplyMessage(header, header, txn, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
+	tracer, cancel, err := newTracer(config)
+	defer cancel()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return tracer.GetResult()
+	return d.store.TraceCall(tx, header, tracer)
+}
 
+func (d *Debug) traceBlock(
+	block *types.Block,
+	config *TraceConfig,
+) (interface{}, error) {
+	if block.Number() == 0 {
+		return nil, ErrTraceGenesisBlock
+	}
+
+	tracer, cancel, err := newTracer(config)
+	defer cancel()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return d.store.TraceBlock(block, tracer)
+}
+
+// newTracer creates new tracer by config
+func newTracer(config *TraceConfig) (
+	tracer.Tracer,
+	context.CancelFunc,
+	error,
+) {
+	var (
+		timeout = defaultTraceTimeout
+		err     error
+	)
+
+	if config.Timeout != nil {
+		if timeout, err = time.ParseDuration(*config.Timeout); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	tracer := structtracer.NewStructTracer(structtracer.Config{
+		EnableMemory:     config.EnableMemory,
+		EnableStack:      !config.DisableStack,
+		EnableStorage:    !config.DisableStorage,
+		EnableReturnData: config.EnableReturnData,
+	})
+
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	go func() {
+		<-timeoutCtx.Done()
+
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
+			tracer.Cancel(ErrExecutionTimeout)
+		}
+	}()
+
+	// cancellation of context is done by caller
+	return tracer, cancel, nil
 }

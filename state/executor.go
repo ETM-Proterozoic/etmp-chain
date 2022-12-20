@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"time"
-
-	"github.com/0xPolygon/polygon-edge/state/runtime/evm"
-	"github.com/hashicorp/go-hclog"
 
 	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/state/runtime"
+	"github.com/0xPolygon/polygon-edge/state/runtime/evm"
+	"github.com/0xPolygon/polygon-edge/state/runtime/precompiled"
+	"github.com/0xPolygon/polygon-edge/state/runtime/tracer"
 	"github.com/0xPolygon/polygon-edge/types"
+	"github.com/hashicorp/go-hclog"
 )
 
 const (
@@ -32,11 +32,10 @@ type GetHashByNumberHelper = func(*types.Header) GetHashByNumber
 
 // Executor is the main entity
 type Executor struct {
-	logger   hclog.Logger
-	config   *chain.Params
-	runtimes []runtime.Runtime
-	state    State
-	GetHash  GetHashByNumberHelper
+	logger  hclog.Logger
+	config  *chain.Params
+	state   State
+	GetHash GetHashByNumberHelper
 
 	PostHook func(txn *Transition)
 }
@@ -44,16 +43,15 @@ type Executor struct {
 // NewExecutor creates a new executor
 func NewExecutor(config *chain.Params, s State, logger hclog.Logger) *Executor {
 	return &Executor{
-		logger:   logger,
-		config:   config,
-		runtimes: []runtime.Runtime{},
-		state:    s,
+		logger: logger,
+		config: config,
+		state:  s,
 	}
 }
 
 func (e *Executor) WriteGenesis(alloc map[types.Address]*chain.GenesisAccount) types.Hash {
 	snap := e.state.NewSnapshot()
-	txn := NewTxn(e.state, snap)
+	txn := NewTxn(snap)
 
 	for addr, account := range alloc {
 		if account.Balance != nil {
@@ -73,14 +71,10 @@ func (e *Executor) WriteGenesis(alloc map[types.Address]*chain.GenesisAccount) t
 		}
 	}
 
-	_, root := txn.Commit(false)
+	objs := txn.Commit(false)
+	_, root := snap.Commit(objs)
 
 	return types.BytesToHash(root)
-}
-
-// SetRuntime adds a runtime to the runtime set
-func (e *Executor) SetRuntime(r runtime.Runtime) {
-	e.runtimes = append(e.runtimes, r)
 }
 
 type BlockResult struct {
@@ -99,8 +93,6 @@ func (e *Executor) ProcessBlock(
 	if err != nil {
 		return nil, err
 	}
-
-	txn.block = block
 
 	for _, t := range block.Transactions {
 		if t.ExceedsBlockGasLimit(block.Header.GasLimit) {
@@ -139,92 +131,49 @@ func (e *Executor) BeginTxn(
 	header *types.Header,
 	coinbaseReceiver types.Address,
 ) (*Transition, error) {
-	config := e.config.Forks.At(header.Number)
-	fmt.Printf(" headerNumer : %d,  chainIDChange: %t \n", header.Number, config.ChainIDChange)
+	forkConfig := e.config.Forks.At(header.Number)
+	fmt.Printf(" headerNumer : %d,  chainIDChange: %t \n", header.Number, forkConfig.ChainIDChange)
 
 	auxSnap2, err := e.state.NewSnapshotAt(parentRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	newTxn := NewTxn(e.state, auxSnap2)
+	newTxn := NewTxn(auxSnap2)
 
 	// fork chainID change
 	ChainID := e.config.ChainID
-	if !config.ChainIDChange {
+	if !forkConfig.ChainIDChange {
 		ChainID = e.config.OldChainID
 	}
 
-	env2 := runtime.TxContext{
+	txCtx := runtime.TxContext{
 		Coinbase:   coinbaseReceiver,
 		Timestamp:  int64(header.Timestamp),
 		Number:     int64(header.Number),
 		Difficulty: types.BytesToHash(new(big.Int).SetUint64(header.Difficulty).Bytes()),
 		GasLimit:   int64(header.GasLimit),
-		// ChainID:    int64(e.config.ChainID),
+		//ChainID:    int64(e.config.ChainID),
 		ChainID: int64(ChainID),
 	}
 
 	txn := &Transition{
 		logger:   e.logger,
 		r:        e,
-		ctx:      env2,
+		ctx:      txCtx,
 		state:    newTxn,
+		snap:     auxSnap2,
 		getHash:  e.GetHash(header),
 		auxState: e.state,
-		config:   config,
-		gasPool:  uint64(env2.GasLimit),
+		config:   forkConfig,
+		gasPool:  uint64(txCtx.GasLimit),
 
 		receipts: []*types.Receipt{},
 		totalGas: 0,
-	}
 
-	return txn, nil
-}
-
-func (e *Executor) BeginTxnTracer(
-	parentRoot types.Hash,
-	header *types.Header,
-	coinbaseReceiver types.Address,
-	tracerConfig runtime.TraceConfig,
-) (*Transition, error) {
-	config := e.config.Forks.At(header.Number)
-	// fmt.Printf("parentRoot", parentRoot)
-	auxSnap2, err := e.state.NewSnapshotAt(parentRoot)
-	if err != nil {
-		return nil, err
-	}
-
-	newTxn := NewTxn(e.state, auxSnap2)
-
-	// fork chainID change
-	ChainID := e.config.ChainID
-	if !config.ChainIDChange {
-		ChainID = e.config.OldChainID
-	}
-
-	env2 := runtime.TxContext{
-		Coinbase:   coinbaseReceiver,
-		Timestamp:  int64(header.Timestamp),
-		Number:     int64(header.Number),
-		Difficulty: types.BytesToHash(new(big.Int).SetUint64(header.Difficulty).Bytes()),
-		GasLimit:   int64(header.GasLimit),
-		ChainID:    int64(ChainID),
-	}
-
-	txn := &Transition{
-		logger:   e.logger,
-		r:        e,
-		ctx:      env2,
-		state:    newTxn,
-		getHash:  e.GetHash(header),
-		auxState: e.state,
-		config:   config,
-		gasPool:  uint64(env2.GasLimit),
-
-		receipts:    []*types.Receipt{},
-		totalGas:    0,
-		traceConfig: tracerConfig, // 由调用者传入新的tracerConfig...
+		evm:         evm.NewEVM(),
+		precompiles: precompiled.NewPrecompiled(),
+		PostHook:    e.PostHook,
 	}
 
 	return txn, nil
@@ -235,11 +184,8 @@ type Transition struct {
 
 	// dummy
 	auxState State
+	snap     Snapshot
 
-	// the current block being processed
-	block *types.Block
-
-	r       *Executor
 	config  chain.ForksInTime
 	state   *Txn
 	getHash GetHashByNumber
@@ -250,10 +196,21 @@ type Transition struct {
 	receipts []*types.Receipt
 	totalGas uint64
 
-	// trace
-	gas         uint64
-	initialGas  uint64
-	traceConfig runtime.TraceConfig
+	PostHook func(t *Transition)
+
+	// runtimes
+	evm         *evm.EVM
+	precompiles *precompiled.Precompiled
+}
+
+func NewTransition(config chain.ForksInTime, snap Snapshot, radix *Txn) *Transition {
+	return &Transition{
+		config:      config,
+		state:       radix,
+		snap:        snap,
+		evm:         evm.NewEVM(),
+		precompiles: precompiled.NewPrecompiled(),
+	}
 }
 
 func (t *Transition) TotalGas() uint64 {
@@ -323,28 +280,19 @@ func (t *Transition) Write(txn *types.Transaction) error {
 
 	logs := t.state.Logs()
 
-	var root []byte
-
 	receipt := &types.Receipt{
 		CumulativeGasUsed: t.totalGas,
 		TxHash:            txn.Hash,
 		GasUsed:           result.GasUsed,
 	}
 
-	if t.config.Byzantium {
-		// The suicided accounts are set as deleted for the next iteration
-		t.state.CleanDeleteObjects(true)
+	// The suicided accounts are set as deleted for the next iteration
+	t.state.CleanDeleteObjects(true)
 
-		if result.Failed() {
-			receipt.SetStatus(types.ReceiptFailed)
-		} else {
-			receipt.SetStatus(types.ReceiptSuccess)
-		}
+	if result.Failed() {
+		receipt.SetStatus(types.ReceiptFailed)
 	} else {
-		ss, aux := t.state.Commit(t.config.EIP155)
-		t.state = NewTxn(t.auxState, ss)
-		root = aux
-		receipt.Root = types.BytesToHash(root)
+		receipt.SetStatus(types.ReceiptSuccess)
 	}
 
 	// if the transaction created a contract, store the creation address in the receipt.
@@ -362,7 +310,8 @@ func (t *Transition) Write(txn *types.Transaction) error {
 
 // Commit commits the final result
 func (t *Transition) Commit() (Snapshot, types.Hash) {
-	s2, root := t.state.Commit(t.config.EIP155)
+	objs := t.state.Commit(t.config.EIP155)
+	s2, root := t.snap.Commit(objs)
 
 	return s2, types.BytesToHash(root)
 }
@@ -381,37 +330,21 @@ func (t *Transition) addGasPool(amount uint64) {
 	t.gasPool += amount
 }
 
-func (t *Transition) SetTxn(txn *Txn) {
-	t.state = txn
-}
-
 func (t *Transition) Txn() *Txn {
 	return t.state
-}
-
-func (t *Transition) GetTxnHash() types.Hash {
-	return t.block.Hash()
-}
-
-func (t *Transition) Block() *types.Block {
-	return t.block
-}
-
-func (t *Transition) SetBlock(block *types.Block) {
-	t.block = block
 }
 
 // Apply applies a new transaction
 func (t *Transition) Apply(msg *types.Transaction) (*runtime.ExecutionResult, error) {
 	s := t.state.Snapshot()
-	result, err := t.apply(msg)
 
+	result, err := t.apply(msg)
 	if err != nil {
 		t.state.RevertToSnapshot(s)
 	}
 
-	if t.r.PostHook != nil {
-		t.r.PostHook(t)
+	if t.PostHook != nil {
+		t.PostHook(t)
 	}
 
 	return result, err
@@ -514,13 +447,8 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 		return nil, NewGasLimitReachedTransitionApplicationError(err)
 	}
 
-	// start tracing
-	var result *runtime.ExecutionResult
-	if t.traceConfig.Debug {
-		t.traceConfig.Tracer.CaptureTxStart(msg.Gas)
-		defer func() {
-			t.traceConfig.Tracer.CaptureTxEnd(result.GasLeft)
-		}()
+	if t.ctx.Tracer != nil {
+		t.ctx.Tracer.TxStart(msg.Gas)
 	}
 
 	// 4. there is no overflow when calculating intrinsic gas
@@ -557,6 +485,10 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 
 	refund := txn.GetRefund()
 	result.UpdateGasUsed(msg.Gas, refund)
+
+	if t.ctx.Tracer != nil {
+		t.ctx.Tracer.TxEnd(result.GasLeft)
+	}
 
 	// refund the sender
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(result.GasLeft), gasPrice)
@@ -597,14 +529,17 @@ func (t *Transition) Call2(
 }
 
 func (t *Transition) run(contract *runtime.Contract, host runtime.Host) *runtime.ExecutionResult {
-	for _, r := range t.r.runtimes {
-		if r.CanRun(contract, host, &t.config) {
-			return r.Run(contract, host, &t.config)
-		}
+	// check the precompiles
+	if t.precompiles.CanRun(contract, host, &t.config) {
+		return t.precompiles.Run(contract, host, &t.config)
+	}
+	// check the evm
+	if t.evm.CanRun(contract, host, &t.config) {
+		return t.evm.Run(contract, host, &t.config)
 	}
 
 	return &runtime.ExecutionResult{
-		Err: fmt.Errorf("not found"),
+		Err: fmt.Errorf("runtime not found"),
 	}
 }
 
@@ -624,18 +559,6 @@ func (t *Transition) transfer(from, to types.Address, amount *big.Int) error {
 	t.state.AddBalance(to, amount)
 
 	return nil
-}
-
-func (t *Transition) GetTxn() *Txn {
-	return t.state
-}
-
-func (t *Transition) GetTracerConfig() runtime.TraceConfig {
-	return t.traceConfig
-}
-
-func (t *Transition) SetTracerConfig(tracerConfig runtime.TraceConfig) {
-	t.traceConfig = tracerConfig
 }
 
 func (t *Transition) applyCall(
@@ -664,43 +587,15 @@ func (t *Transition) applyCall(
 	}
 
 	var result *runtime.ExecutionResult
-	if t.traceConfig.Debug {
-		if c.Depth == 1 {
-			t.traceConfig.Tracer.CaptureStart(t, c.Caller, c.Address, false, c.Input, c.Gas, c.Value)
-			defer func(startTime time.Time) {
-				t.traceConfig.Tracer.CaptureEnd(result.ReturnValue, c.Gas-result.GasLeft, time.Since(startTime), result.Err)
-			}(time.Now())
-		} else {
-			// Change to OpCode according to callType
-			var opCallType evm.OpCode
-			switch callType {
-			case runtime.Call:
-				opCallType = evm.CALL
-			case runtime.StaticCall:
-				opCallType = evm.STATICCALL
-			case runtime.DelegateCall:
-				opCallType = evm.DELEGATECALL
-			case runtime.CallCode:
-				opCallType = evm.CALLCODE
-			case runtime.Create:
-				opCallType = evm.CREATE
-			case runtime.Create2:
-				opCallType = evm.CREATE2
-			default:
-				panic("not expected")
-			}
 
-			t.traceConfig.Tracer.CaptureEnter(int(opCallType), c.Caller, c.Address, c.Input, c.Gas, c.Value)
-			defer func() {
-				t.traceConfig.Tracer.CaptureExit(result.ReturnValue, c.Gas-result.GasLeft, result.Err)
-			}()
-		}
-	}
+	t.captureCallStart(c, callType)
+
 	result = t.run(c, host)
-
 	if result.Failed() {
 		t.state.RevertToSnapshot(snapshot)
 	}
+
+	t.captureCallEnd(c, result)
 
 	return result
 }
@@ -761,29 +656,15 @@ func (t *Transition) applyCreate(c *runtime.Contract, host runtime.Host, op evm.
 	}
 
 	var result *runtime.ExecutionResult
-	start := time.Now()
 
-	var gasCost uint64
+	t.captureCallStart(c, evm.CREATE)
 
-	if t.traceConfig.Debug {
-		// var output []byte
-		// copy(output, result.ReturnValue)
-		if c.Depth == 1 {
-			t.traceConfig.Tracer.CaptureStart(t, c.Caller, c.Address, true, c.Code, c.Gas, c.Value)
-			defer func(gas uint64) {
-				t.traceConfig.Tracer.CaptureEnd(result.ReturnValue, gas, time.Since(start), result.Err)
-			}(gasCost)
-		} else {
-			t.traceConfig.Tracer.CaptureEnter(int(op), c.Caller, c.Address, c.Code, c.Gas, c.Value)
-			defer func(gas uint64) {
-				t.traceConfig.Tracer.CaptureExit(result.ReturnValue, gas, result.Err)
-			}(gasCost)
-		}
-	}
+	defer func() {
+		// pass result to be set later
+		t.captureCallEnd(c, result)
+	}()
 
 	result = t.run(c, host)
-	gasCost = uint64(len(result.ReturnValue)) * 200
-
 	if result.Failed() {
 		t.state.RevertToSnapshot(snapshot)
 
@@ -921,6 +802,20 @@ func (t *Transition) SetCodeDirectly(addr types.Address, code []byte) error {
 	return nil
 }
 
+// SetTracer sets tracer to the context in order to enable it
+func (t *Transition) SetTracer(tracer tracer.Tracer) {
+	t.ctx.Tracer = tracer
+}
+
+// GetTracer returns a tracer in context
+func (t *Transition) GetTracer() runtime.VMTracer {
+	return t.ctx.Tracer
+}
+
+func (t *Transition) GetRefund() uint64 {
+	return t.state.GetRefund()
+}
+
 func TransactionGasCost(msg *types.Transaction, isHomestead, isIstanbul bool) (uint64, error) {
 	cost := uint64(0)
 
@@ -962,4 +857,34 @@ func TransactionGasCost(msg *types.Transaction, isHomestead, isIstanbul bool) (u
 	}
 
 	return cost, nil
+}
+
+// captureCallStart calls CallStart in Tracer if context has the tracer
+func (t *Transition) captureCallStart(c *runtime.Contract, callType runtime.CallType) {
+	if t.ctx.Tracer == nil {
+		return
+	}
+
+	t.ctx.Tracer.CallStart(
+		c.Depth,
+		c.Caller,
+		c.Address,
+		int(callType),
+		c.Gas,
+		c.Value,
+		c.Input,
+	)
+}
+
+// captureCallEnd calls CallEnd in Tracer if context has the tracer
+func (t *Transition) captureCallEnd(c *runtime.Contract, result *runtime.ExecutionResult) {
+	if t.ctx.Tracer == nil {
+		return
+	}
+
+	t.ctx.Tracer.CallEnd(
+		c.Depth,
+		result.ReturnValue,
+		result.Err,
+	)
 }
