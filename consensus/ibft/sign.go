@@ -6,8 +6,6 @@ import (
 
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
-	"github.com/0xPolygon/polygon-edge/secrets"
-	"github.com/0xPolygon/polygon-edge/secrets/awskms"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/umbracle/fastrlp"
 )
@@ -18,10 +16,6 @@ const (
 	// for new clients to read old committed seals
 	legacyCommitCode = 2
 )
-
-type sign struct {
-	ibft *backendIBFT
-}
 
 func wrapCommitHash(b []byte) []byte {
 	return crypto.Keccak256(b, []byte{byte(legacyCommitCode)})
@@ -61,40 +55,9 @@ func signSealImpl(prv *ecdsa.PrivateKey, h *types.Header) ([]byte, error) {
 	return crypto.Sign(prv, crypto.Keccak256(hash))
 }
 
-// abstract kms sign
-func (s *sign) signSealImpl(prv *ecdsa.PrivateKey, h *types.Header) ([]byte, error) {
-	hash, err := calculateHeaderHash(h)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.Sign(prv, crypto.Keccak256(hash))
-}
-
 func writeProposerSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types.Header, error) {
 	h = h.Copy()
 	seal, err := signSealImpl(prv, h)
-
-	if err != nil {
-		return nil, err
-	}
-
-	extra, err := getIbftExtra(h)
-	if err != nil {
-		return nil, err
-	}
-
-	extra.ProposerSeal = seal
-	if err := PutIbftExtra(h, extra); err != nil {
-		return nil, err
-	}
-
-	return h, nil
-}
-
-func (s *sign) writeProposerSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types.Header, error) {
-	h = h.Copy()
-	seal, err := s.signSealImpl(prv, h)
 
 	if err != nil {
 		return nil, err
@@ -117,22 +80,6 @@ func (s *sign) writeProposerSeal(prv *ecdsa.PrivateKey, h *types.Header) (*types
 // header hash and the private key
 func writeCommittedSeal(prv *ecdsa.PrivateKey, headerHash []byte) ([]byte, error) {
 	return crypto.Sign(
-		prv,
-		// Of course, this keccaking of an extended array is not according to the IBFT 2.0 spec,
-		// but almost nothing in this legacy signing package is. This is kept
-		// in order to preserve the running chains that used these
-		// old (and very, very incorrect) signing schemes
-		crypto.Keccak256(
-			wrapCommitHash(headerHash),
-		),
-	)
-}
-
-// abstract kms sign
-// writeCommittedSeal generates the legacy committed seal using the passed in
-// header hash and the private key
-func (s *sign) writeCommittedSeal(prv *ecdsa.PrivateKey, headerHash []byte) ([]byte, error) {
-	return s.Sign(
 		prv,
 		// Of course, this keccaking of an extended array is not according to the IBFT 2.0 spec,
 		// but almost nothing in this legacy signing package is. This is kept
@@ -263,21 +210,11 @@ func verifyCommittedFields(
 	}
 
 	// Valid committed seals must be at least 2F+1
-	// 	2F 	is the required number of honest validators who provided the committed seals
-	// 	+1	is the proposer
+	// 2F 	is the required number of honest validators who provided the committed seals
+	// +1	is the proposer
 	if validSeals := len(visited); validSeals < quorumSizeFn(snap.Set) {
 		return fmt.Errorf("not enough seals to seal block")
 	}
 
 	return nil
-}
-
-func (s *sign) Sign(priv *ecdsa.PrivateKey, hash []byte) ([]byte, error) {
-	k, ok := s.ibft.secretsManager.(*awskms.KmsSecretManager)
-	if ok {
-		return k.SignBySecret(secrets.ValidatorKey, s.ibft.config.Params.ChainID, hash)
-	}
-
-	return crypto.Sign(priv, hash)
-
 }

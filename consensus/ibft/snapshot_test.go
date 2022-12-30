@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/0xPolygon/polygon-edge/consensus"
+
 	"github.com/0xPolygon/polygon-edge/blockchain"
 	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/crypto"

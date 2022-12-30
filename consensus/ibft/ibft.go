@@ -41,6 +41,7 @@ type txPoolInterface interface {
 	Drop(tx *types.Transaction)
 	Demote(tx *types.Transaction)
 	ResetWithHeaders(headers ...*types.Header)
+	SetSealing(bool)
 }
 
 // backendIBFT represents the IBFT consensus mechanism object
@@ -77,14 +78,12 @@ type backendIBFT struct {
 
 	blockTime time.Duration // Minimum block generation time in seconds
 
-	sealing bool // Flag indicating if the node is a sealer
-
 	closeCh chan struct{} // Channel for closing
 }
 
 // Factory implements the base consensus Factory method
 func Factory(params *consensus.Params) (consensus.Consensus, error) {
-	//	defaults for user set fields in genesis
+	// defaults for user set fields in genesis
 	var (
 		epochSize          = uint64(DefaultEpochSize)
 		quorumSizeBlockNum = uint64(0)
@@ -101,7 +100,7 @@ func Factory(params *consensus.Params) (consensus.Consensus, error) {
 	}
 
 	if rawBlockNum, ok := params.Config.Config["quorumSizeBlockNum"]; ok {
-		//	Block number specified for quorum size switch
+		// Block number specified for quorum size switch
 		readBlockNum, ok := rawBlockNum.(float64)
 		if !ok {
 			return nil, errors.New("invalid type assertion")
@@ -121,7 +120,6 @@ func Factory(params *consensus.Params) (consensus.Consensus, error) {
 		network:            params.Network,
 		epochSize:          epochSize,
 		quorumSizeBlockNum: quorumSizeBlockNum,
-		sealing:            params.Seal,
 		metrics:            params.Metrics,
 		secretsManager:     params.SecretsManager,
 		blockTime:          time.Duration(params.BlockTime) * time.Second,
@@ -194,7 +192,7 @@ func (i *backendIBFT) Initialize() error {
 		i,
 	)
 
-	//	Ensure consensus takes into account user configured block production time
+	// Ensure consensus takes into account user configured block production time
 	i.consensus.ExtendRoundTimeout(i.blockTime)
 
 	// Set up the snapshots
@@ -212,7 +210,7 @@ func (i *backendIBFT) Initialize() error {
 	return nil
 }
 
-//	sync runs the syncer in the background to receive blocks from advanced peers
+// sync runs the syncer in the background to receive blocks from advanced peers
 func (i *backendIBFT) startSyncing() {
 	callInsertBlockHook := func(blockNumber uint64) {
 		if err := i.runHook(InsertBlockHook, blockNumber, blockNumber); err != nil {
@@ -239,7 +237,7 @@ func (i *backendIBFT) Start() error {
 		return err
 	}
 
-	//	Start syncing blocks from other peers
+	// Start syncing blocks from other peers
 	go i.startSyncing()
 
 	// Start the actual consensus protocol
@@ -372,8 +370,10 @@ func (i *backendIBFT) startConsensus() {
 	// to insert a valid block. Used for cancelling active consensus
 	// rounds for a specific height
 	go func() {
+		eventCh := newBlockSub.GetEventCh()
+
 		for {
-			if ev := <-newBlockSub.GetEventCh(); ev.Source == "syncer" {
+			if ev := <-eventCh; ev.Source == "syncer" {
 				if ev.NewChain[0].Number < i.blockchain.Header().Number {
 					// The blockchain notification system can eventually deliver
 					// stale block notifications. These should be ignored
@@ -401,6 +401,8 @@ func (i *backendIBFT) startConsensus() {
 		i.updateActiveValidatorSet(latest)
 
 		isValidator = i.isActiveValidator()
+
+		i.txpool.SetSealing(isValidator)
 
 		if isValidator {
 			sequenceCh = i.consensus.runSequence(pending)
@@ -471,11 +473,6 @@ func (i *backendIBFT) updateMetrics(block *types.Block) {
 var (
 	errBlockVerificationFailed = errors.New("block verification fail")
 )
-
-// isSealing checks if the current node is sealing blocks
-func (i *backendIBFT) isSealing() bool {
-	return i.sealing
-}
 
 // verifyHeaderImpl implements the actual header verification logic
 func (i *backendIBFT) verifyHeaderImpl(snap *Snapshot, parent, header *types.Header) error {

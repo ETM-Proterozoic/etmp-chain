@@ -65,6 +65,7 @@ type Transaction struct {
 	LoggerConfig *LoggerConfig
 }
 
+// IsContractCreation checks if tx is contract creation
 func (t *Transaction) IsContractCreation() bool {
 	return t.To == nil
 }

@@ -2,6 +2,8 @@ package chain
 
 import (
 	"math/big"
+
+	"github.com/0xPolygon/polygon-edge/types"
 )
 
 // Params are all the set of params for the chain
@@ -10,6 +12,7 @@ type Params struct {
 	ChainID        int                    `json:"chainID"`
 	OldChainID     int                    `json:"oldChainID"`
 	Engine         map[string]interface{} `json:"engine"`
+	Whitelists     *Whitelists            `json:"whitelists,omitempty"`
 	BlockGasTarget uint64                 `json:"blockGasTarget"`
 }
 
@@ -20,6 +23,11 @@ func (p *Params) GetEngine() string {
 	}
 
 	return ""
+}
+
+// Whitelists specifies supported whitelists
+type Whitelists struct {
+	Deployment []types.Address `json:"deployment,omitempty"`
 }
 
 // Forks specifies when each fork is activated
