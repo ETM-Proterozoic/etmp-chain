@@ -1,7 +1,6 @@
 package staking
 
 import (
-	"encoding/binary"
 	"errors"
 	"math/big"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/0xPolygon/polygon-edge/contracts/abis"
 	"github.com/0xPolygon/polygon-edge/state/runtime"
 	"github.com/0xPolygon/polygon-edge/types"
-	"github.com/umbracle/ethgo"
 	"github.com/umbracle/ethgo/abi"
 )
 
@@ -29,12 +27,6 @@ var (
 	ErrMethodNotFoundInABI = errors.New("method not found in ABI")
 	ErrFailedTypeAssertion = errors.New("failed type assertion")
 )
-
-// TxQueryHandler is a interface to call view method in the contract
-type TxQueryHandler interface {
-	Apply(*types.Transaction) (*runtime.ExecutionResult, error)
-	GetNonce(types.Address) uint64
-}
 
 // decodeWeb3ArrayOfBytes is a helper function to parse the data
 // representing array of bytes in contract result
