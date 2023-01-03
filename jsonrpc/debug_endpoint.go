@@ -15,7 +15,6 @@ type debugTraceStore interface {
 	// add new method to handle tracer
 	ApplyMessage(parentHeader *types.Header, header *types.Header, txn *types.Transaction, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
 	ApplyBlockTxn(parentHeader *types.Header, block *types.Block, hash types.Hash, tracer runtime.TraceConfig) (*runtime.ExecutionResult, error)
-
 }
 
 type debugStore interface {
@@ -233,7 +232,7 @@ func (d *Debug) TraceTransaction(hash types.Hash, config *TraceConfig) (interfac
 
 	txn := msg.Copy()
 	txn.Gas = msg.Gas
-	parentHeader.GasLimit += txn.Gas        
+	parentHeader.GasLimit += txn.Gas
 	_, err = d.store.ApplyBlockTxn(parentHeader, block, hash, runtime.TraceConfig{Debug: true, Tracer: tracer, NoBaseFee: true})
 
 	if err != nil {
