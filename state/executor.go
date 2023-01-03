@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 
 	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/crypto"
@@ -32,10 +33,11 @@ type GetHashByNumberHelper = func(*types.Header) GetHashByNumber
 
 // Executor is the main entity
 type Executor struct {
-	logger  hclog.Logger
-	config  *chain.Params
-	state   State
-	GetHash GetHashByNumberHelper
+	logger   hclog.Logger
+	config   *chain.Params
+	runtimes []runtime.Runtime
+	state    State
+	GetHash  GetHashByNumberHelper
 
 	PostHook func(txn *Transition)
 }
@@ -138,7 +140,7 @@ func (e *Executor) BeginTxn(
 		return nil, err
 	}
 
-	newTxn := NewTxn(e.state, auxSnap2)
+	newTxn := NewTxn(auxSnap2)
 
 	// fork chainID change
 	ChainID := e.config.ChainID
@@ -191,11 +193,11 @@ func (e *Executor) BeginTxnTracer(
 		return nil, err
 	}
 
-	newTxn := NewTxn(e.state, auxSnap2)
+	newTxn := NewTxn(auxSnap2)
 
 	// fork chainID change
 	ChainID := e.config.ChainID
-	if !config.ChainIDChange {
+	if !forkConfig.ChainIDChange {
 		ChainID = e.config.OldChainID
 	}
 
@@ -216,7 +218,7 @@ func (e *Executor) BeginTxnTracer(
 		getHash:  e.GetHash(header),
 		auxState: e.state,
 		config:   forkConfig,
-		gasPool:  uint64(env2.GasLimit),
+		gasPool:  uint64(txCtx.GasLimit),
 
 		receipts:    []*types.Receipt{},
 		totalGas:    0,

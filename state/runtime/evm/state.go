@@ -251,7 +251,7 @@ func (c *state) Run() ([]byte, error) {
 			}
 		}()
 	}
-	codeSize := len(c.code)
+
 	for !c.stop {
 		if tracer.Debug {
 			logged, pc = false, uint64(c.ip)
