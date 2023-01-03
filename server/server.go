@@ -541,7 +541,7 @@ func (j *jsonRPCHub) ApplyBlockTxn(
 		if txn.Hash == hash {
 			break
 		}
-		err = transition.Write(txn)
+		transition.Write(txn)
 	}
 
 	// 设置config
