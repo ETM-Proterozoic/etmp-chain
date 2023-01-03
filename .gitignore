@@ -26,3 +26,5 @@ artifacts
 
 # Log files
 *.log
+
+vendor/
