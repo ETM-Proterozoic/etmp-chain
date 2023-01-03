@@ -37,6 +37,10 @@ func NewTxn(state State, snapshot Snapshot) *Txn {
 	return newTxn(state, snapshot)
 }
 
+func (txn *Txn) GetRadix() *iradix.Txn {
+	return txn.txn
+}
+
 func newTxn(state State, snapshot Snapshot) *Txn {
 	i := iradix.New()
 
@@ -591,7 +595,7 @@ func (txn *Txn) CleanDeleteObjects(deleteEmptyObjects bool) {
 	txn.txn.Delete(refundIndex)
 }
 
-func (txn *Txn) Commit(deleteEmptyObjects bool) (Snapshot, []byte) {
+func (txn *Txn) Commit(deleteEmptyObjects bool) []*Object {
 	txn.CleanDeleteObjects(deleteEmptyObjects)
 
 	x := txn.txn.Commit()
@@ -638,7 +642,5 @@ func (txn *Txn) Commit(deleteEmptyObjects bool) (Snapshot, []byte) {
 		return false
 	})
 
-	t, hash := txn.snapshot.Commit(objs)
-
-	return t, hash
+	return objs
 }

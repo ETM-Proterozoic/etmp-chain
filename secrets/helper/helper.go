@@ -34,8 +34,8 @@ func SetupLocalSecretsManager(dataDir string) (secrets.SecretsManager, error) {
 	)
 }
 
-// SetupHashicorpVault is a helper method for boilerplate hashicorp vault secrets manager setup
-func SetupHashicorpVault(
+// setupHashicorpVault is a helper method for boilerplate hashicorp vault secrets manager setup
+func setupHashicorpVault(
 	secretsConfig *secrets.SecretsManagerConfig,
 ) (secrets.SecretsManager, error) {
 	return hashicorpvault.SecretsManagerFactory(
@@ -46,8 +46,8 @@ func SetupHashicorpVault(
 	)
 }
 
-// SetupAWSSSM is a helper method for boilerplate aws ssm secrets manager setup
-func SetupAWSSSM(
+// setupAWSSSM is a helper method for boilerplate aws ssm secrets manager setup
+func setupAWSSSM(
 	secretsConfig *secrets.SecretsManagerConfig,
 ) (secrets.SecretsManager, error) {
 	return awsssm.SecretsManagerFactory(
@@ -58,8 +58,8 @@ func SetupAWSSSM(
 	)
 }
 
-// SetupGCPSSM is a helper method for boilerplate Google Cloud Computing secrets manager setup
-func SetupGCPSSM(
+// setupGCPSSM is a helper method for boilerplate Google Cloud Computing secrets manager setup
+func setupGCPSSM(
 	secretsConfig *secrets.SecretsManagerConfig,
 ) (secrets.SecretsManager, error) {
 	return gcpssm.SecretsManagerFactory(
