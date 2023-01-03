@@ -61,7 +61,7 @@ func (ip *initParams) initSecretsManager() error {
 			return err
 		}
 
-		ip.secretsManager, err = helper.InitCloudSecretsManager(ip.secretsConfig)
+		ip.secretsManager, err = helper.InitCloudSecretsManager(ip.secretsConfig, ip.dataDir)
 
 		return err
 	}

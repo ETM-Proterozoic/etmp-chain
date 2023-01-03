@@ -23,8 +23,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/dop251/goja"
-
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/state"
 	"github.com/0xPolygon/polygon-edge/state/runtime"
@@ -33,6 +31,7 @@ import (
 	jsassets "github.com/0xPolygon/polygon-edge/tracers/js/internal/tracers"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/0xPolygon/polygon-edge/types/hexutil"
+	"github.com/dop251/goja"
 )
 
 var assetTracers = make(map[string]string)

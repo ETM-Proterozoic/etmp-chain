@@ -243,21 +243,21 @@ func InitCloudSecretsManager(secretsConfig *secrets.SecretsManagerConfig, dataDi
 
 	switch secretsConfig.Type {
 	case secrets.HashicorpVault:
-		vault, err := SetupHashicorpVault(secretsConfig)
+		vault, err := setupHashicorpVault(secretsConfig)
 		if err != nil {
 			return secretsManager, err
 		}
 
 		secretsManager = vault
 	case secrets.AWSSSM:
-		AWSSSM, err := SetupAWSSSM(secretsConfig)
+		AWSSSM, err := setupAWSSSM(secretsConfig)
 		if err != nil {
 			return secretsManager, err
 		}
 
 		secretsManager = AWSSSM
 	case secrets.GCPSSM:
-		GCPSSM, err := SetupGCPSSM(secretsConfig)
+		GCPSSM, err := setupGCPSSM(secretsConfig)
 		if err != nil {
 			return secretsManager, err
 		}
