@@ -29,6 +29,14 @@ func wrapCommitHash(data []byte) []byte {
 
 // getOrCreateECDSAKey loads ECDSA key or creates a new key
 func getOrCreateECDSAKey(manager secrets.SecretsManager) (*ecdsa.PrivateKey, error) {
+	if manager.GetSecretsManagerType() == secrets.AwsKms {
+		validatorKey, _, err := crypto.GenerateAndEncodeECDSAPrivateKey()
+		if err != nil {
+			return nil, err
+		}
+		return validatorKey, nil
+	}
+
 	if !manager.HasSecret(secrets.ValidatorKey) {
 		if _, err := helper.InitECDSAValidatorKey(manager); err != nil {
 			return nil, err
