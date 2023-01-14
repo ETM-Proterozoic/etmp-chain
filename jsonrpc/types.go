@@ -29,6 +29,8 @@ type transaction struct {
 	BlockHash   *types.Hash    `json:"blockHash"`
 	BlockNumber *argUint64     `json:"blockNumber"`
 	TxIndex     *argUint64     `json:"transactionIndex"`
+	GasFeeCap   argBig         `json:"maxFeePerGas,omitempty"`
+	GasTipCap   argBig         `json:"maxPriorityFeePerGas,omitempty"`
 }
 
 func (t transaction) getHash() types.Hash { return t.Hash }
@@ -53,17 +55,19 @@ func toTransaction(
 	txIndex *int,
 ) *transaction {
 	res := &transaction{
-		Nonce:    argUint64(t.Nonce),
-		GasPrice: argBig(*t.GasPrice),
-		Gas:      argUint64(t.Gas),
-		To:       t.To,
-		Value:    argBig(*t.Value),
-		Input:    t.Input,
-		V:        argBig(*t.V),
-		R:        argBig(*t.R),
-		S:        argBig(*t.S),
-		Hash:     t.Hash,
-		From:     t.From,
+		Nonce:     argUint64(t.Nonce),
+		GasPrice:  argBig(*t.GasPrice),
+		Gas:       argUint64(t.Gas),
+		To:        t.To,
+		Value:     argBig(*t.Value),
+		Input:     t.Input,
+		V:         argBig(*t.V),
+		R:         argBig(*t.R),
+		S:         argBig(*t.S),
+		Hash:      t.Hash,
+		From:      t.From,
+		GasFeeCap: argBig(*t.GasFeeCap),
+		GasTipCap: argBig(*t.GasTipCap),
 	}
 
 	if blockNumber != nil {

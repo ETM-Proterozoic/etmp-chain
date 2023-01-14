@@ -47,17 +47,19 @@ type TxData interface {
 }
 
 type Transaction struct {
-	Nonce    uint64
-	GasPrice *big.Int
-	Gas      uint64
-	To       *Address
-	Value    *big.Int
-	Input    []byte
-	V        *big.Int
-	R        *big.Int
-	S        *big.Int
-	Hash     Hash
-	From     Address
+	Nonce     uint64
+	GasPrice  *big.Int
+	Gas       uint64
+	To        *Address
+	Value     *big.Int
+	Input     []byte
+	V         *big.Int
+	R         *big.Int
+	S         *big.Int
+	Hash      Hash
+	From      Address
+	GasFeeCap *big.Int
+	GasTipCap *big.Int
 
 	// Cache
 	size atomic.Value

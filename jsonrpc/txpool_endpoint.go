@@ -50,6 +50,8 @@ type txpoolTransaction struct {
 	BlockHash   types.Hash     `json:"blockHash"`
 	BlockNumber interface{}    `json:"blockNumber"`
 	TxIndex     interface{}    `json:"transactionIndex"`
+	GasFeeCap   argBig         `json:"maxFeePerGas,omitempty"`
+	GasTipCap   argBig         `json:"maxPriorityFeePerGas,omitempty"`
 }
 
 func toTxPoolTransaction(t *types.Transaction) *txpoolTransaction {
