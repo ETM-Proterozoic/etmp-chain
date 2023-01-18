@@ -2,6 +2,7 @@ package signer
 
 import (
 	"errors"
+	"runtime/debug"
 
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/types"
@@ -248,6 +249,7 @@ func (s *SignerImpl) VerifyCommittedSeals(
 	}
 
 	if numSeals < quorumSize {
+		debug.PrintStack()
 		return ErrNotEnoughCommittedSeals
 	}
 
@@ -291,6 +293,7 @@ func (s *SignerImpl) VerifyParentCommittedSeals(
 	}
 
 	if numSeals < quorum {
+		debug.PrintStack()
 		return ErrNotEnoughCommittedSeals
 	}
 
