@@ -166,6 +166,8 @@ func (s *ECDSAKeyManager) verifyCommittedSealsImpl(
 		visited[addr] = true
 	}
 
+	fmt.Printf("len(visited):%d \n", len(visited))
+
 	return numSeals, nil
 }
 
