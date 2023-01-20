@@ -139,6 +139,7 @@ func (t *Transaction) Size() uint64 {
 	return size
 }
 
+//Todo: Is this should need ?
 func (t *Transaction) ExceedsBlockGasLimit(blockGasLimit uint64) bool {
 	return t.Gas > blockGasLimit
 }
