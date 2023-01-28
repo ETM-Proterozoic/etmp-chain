@@ -32,6 +32,8 @@ type Receipt struct {
 	GasUsed         uint64
 	ContractAddress *Address
 	TxHash          Hash
+
+	TransactionType TxType
 }
 
 func (r *Receipt) SetStatus(s ReceiptStatus) {

@@ -1,10 +1,26 @@
 package types
 
 import (
+	"fmt"
 	"math/big"
 	"sync/atomic"
 
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
+)
+
+const (
+	// StateTransactionGasLimit is arbitrary default gas limit for state transactions
+	StateTransactionGasLimit = 1000000
+)
+
+// TxType is the transaction type.
+type TxType byte
+
+// List of supported transaction types
+const (
+	LegacyTx     TxType = 0x0
+	StateTx      TxType = 0x7f
+	DynamicFeeTx TxType = 0x8f
 )
 
 // Transaction types.
@@ -13,6 +29,20 @@ const (
 	AccessListTxType
 	DynamicFeeTxType
 )
+
+func txTypeFromByte(b byte) (TxType, error) {
+	tt := TxType(b)
+
+	switch tt {
+	// case LegacyTx, StateTx, DynamicFeeTx:
+	case AccessListTxType:
+		return StateTx, nil
+	case DynamicFeeTxType:
+		return DynamicFeeTx, nil
+	default:
+		return tt, fmt.Errorf("unknown transaction type: %d", b)
+	}
+}
 
 // Config are the configuration options for structured logger the EVM
 type LoggerConfig struct {
@@ -60,6 +90,8 @@ type Transaction struct {
 	From      Address
 	GasFeeCap *big.Int
 	GasTipCap *big.Int
+
+	Type TxType
 
 	// Cache
 	size atomic.Value
