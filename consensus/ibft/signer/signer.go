@@ -249,6 +249,7 @@ func (s *SignerImpl) VerifyCommittedSeals(
 		return err
 	}
 
+	fmt.Printf("——numSeals:%d ——quorumSize:%d \n", numSeals, quorumSize)
 	if numSeals < quorumSize {
 		fmt.Printf("numSeals:%d quorumSize:%d \n", numSeals, quorumSize)
 		debug.PrintStack()
