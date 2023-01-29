@@ -430,6 +430,7 @@ func (i *backendIBFT) VerifyHeader(header *types.Header) error {
 
 	// verify the Committed Seals
 	// CommittedSeals exists only in the finalized header
+	fmt.Printf("——validators.Len:%d ——validators:%+v \n", validators.Len(), validators)
 	if err := headerSigner.VerifyCommittedSeals(
 		header,
 		validators,
