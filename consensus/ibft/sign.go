@@ -265,6 +265,7 @@ func verifyCommittedFields(
 	// Valid committed seals must be at least 2F+1
 	// 	2F 	is the required number of honest validators who provided the committed seals
 	// 	+1	is the proposer
+	fmt.Printf("——validSeals:%d ——quorumSizeBlockNum:%d \n", len(visited), quorumSizeFn(snap.Set))
 	if validSeals := len(visited); validSeals < quorumSizeFn(snap.Set) {
 		return fmt.Errorf("not enough seals to seal block")
 	}
