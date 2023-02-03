@@ -157,16 +157,15 @@ func (s *ECDSAKeyManager) verifyCommittedSealsImpl(
 
 		if visited[addr] {
 			return 0, ErrRepeatedCommittedSeal
+		} else {
+			if !validators.Includes(addr) {
+				return 0, ErrNonValidatorCommittedSeal
+			}
+			visited[addr] = true
 		}
-
-		if !validators.Includes(addr) {
-			return 0, ErrNonValidatorCommittedSeal
-		}
-
-		visited[addr] = true
 	}
 
-	return numSeals, nil
+	return len(visited), nil
 }
 
 type SerializedSeal [][]byte
