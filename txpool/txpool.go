@@ -534,6 +534,7 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 
 	// If no address was set, update it
 	if tx.From == types.ZeroAddress {
+		fmt.Println(" None From")
 		tx.From = from
 	}
 
@@ -554,6 +555,10 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 	if balanceErr != nil {
 		return ErrInvalidAccountState
 	}
+
+	fmt.Printf("Debug Tx : %+v", tx)
+
+	fmt.Println("Debug accout balance : ", accountBalance.Uint64(), " tx.From: ", tx.From)
 
 	// Check if the sender has enough funds to execute the transaction
 	if accountBalance.Cmp(tx.Cost()) < 0 {

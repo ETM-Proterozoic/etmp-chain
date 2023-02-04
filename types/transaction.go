@@ -79,6 +79,8 @@ type TxData interface {
 type Transaction struct {
 	Nonce     uint64
 	GasPrice  *big.Int
+	GasTipCap *big.Int
+	GasFeeCap *big.Int
 	Gas       uint64
 	To        *Address
 	Value     *big.Int
@@ -88,8 +90,6 @@ type Transaction struct {
 	S         *big.Int
 	Hash      Hash
 	From      Address
-	GasFeeCap *big.Int
-	GasTipCap *big.Int
 
 	Type TxType
 
@@ -97,6 +97,14 @@ type Transaction struct {
 	size atomic.Value
 
 	LoggerConfig *LoggerConfig
+}
+
+func (t *Transaction) GetGasPrice() *big.Int {
+	if t.GasPrice != nil {
+		return t.GasPrice
+	}
+
+	return t.GasFeeCap
 }
 
 func (t *Transaction) IsContractCreation() bool {
@@ -149,7 +157,8 @@ func (t *Transaction) Copy() *Transaction {
 
 // Cost returns gas * gasPrice + value
 func (t *Transaction) Cost() *big.Int {
-	total := new(big.Int).Mul(t.GasPrice, new(big.Int).SetUint64(t.Gas))
+	// total := new(big.Int).Mul(t.GasPrice, new(big.Int).SetUint64(t.Gas))
+	total := new(big.Int).Mul(t.GetGasPrice(), new(big.Int).SetUint64(t.Gas)) //Todo: Important, need improve
 	total.Add(total, t.Value)
 
 	return total
@@ -176,8 +185,12 @@ func (t *Transaction) ExceedsBlockGasLimit(blockGasLimit uint64) bool {
 	return t.Gas > blockGasLimit
 }
 
-func (t *Transaction) IsUnderpriced(priceLimit uint64) bool {
-	return t.GasPrice.Cmp(big.NewInt(0).SetUint64(priceLimit)) < 0
+func (t *Transaction) IsUnderpriced(priceLimit uint64) bool { //Todo: Important, need improve
+	if t.GetGasPrice() != nil {
+		return t.GetGasPrice().Cmp(big.NewInt(0).SetUint64(priceLimit)) < 0
+	}
+
+	return t.GetGasPrice().Cmp(big.NewInt(0).SetUint64(priceLimit)) < 0
 }
 
 func (t *Transaction) SetLoggerConfig(config *LoggerConfig) {

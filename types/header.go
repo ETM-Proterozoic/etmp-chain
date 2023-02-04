@@ -30,6 +30,9 @@ type Header struct {
 	MixHash      Hash    `json:"mixHash"`
 	Nonce        Nonce   `json:"nonce"`
 	Hash         Hash    `json:"hash"`
+
+	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
+	BaseFee uint64
 }
 
 // headerJSON represents a block header used for json calls

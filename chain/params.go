@@ -29,6 +29,7 @@ type Forks struct {
 	Constantinople *Fork `json:"constantinople,omitempty"`
 	Petersburg     *Fork `json:"petersburg,omitempty"`
 	Istanbul       *Fork `json:"istanbul,omitempty"`
+	London         *Fork `json:"london,omitempty"`
 	EIP150         *Fork `json:"EIP150,omitempty"`
 	EIP158         *Fork `json:"EIP158,omitempty"`
 	EIP155         *Fork `json:"EIP155,omitempty"`
@@ -69,6 +70,10 @@ func (f *Forks) IsEIP158(block uint64) bool {
 
 func (f *Forks) IsEIP155(block uint64) bool {
 	return f.active(f.EIP155, block)
+}
+
+func (f *Forks) IsLondon(block uint64) bool {
+	return f.active(f.London, block)
 }
 
 func (f *Forks) IsChainIDChange(block uint64) bool {
