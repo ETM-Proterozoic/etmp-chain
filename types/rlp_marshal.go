@@ -170,24 +170,49 @@ func (t *Transaction) MarshalRLPTo(dst []byte) []byte {
 func (t *Transaction) MarshalRLPWith(arena *fastrlp.Arena) *fastrlp.Value {
 	vv := arena.NewArray()
 
-	vv.Set(arena.NewUint(t.Nonce))
-	vv.Set(arena.NewBigInt(t.GasPrice))
-	vv.Set(arena.NewUint(t.Gas))
+	if t.GasPrice != nil {
+		vv.Set(arena.NewUint(t.Nonce))
+		vv.Set(arena.NewBigInt(t.GasPrice))
+		vv.Set(arena.NewUint(t.Gas))
 
-	// Address may be empty
-	if t.To != nil {
-		vv.Set(arena.NewBytes((*t.To).Bytes()))
+		// Address may be empty
+		if t.To != nil {
+			vv.Set(arena.NewBytes((*t.To).Bytes()))
+		} else {
+			vv.Set(arena.NewNull())
+		}
+
+		vv.Set(arena.NewBigInt(t.Value))
+		vv.Set(arena.NewCopyBytes(t.Input))
+
+		// signature values
+		vv.Set(arena.NewBigInt(t.V))
+		vv.Set(arena.NewBigInt(t.R))
+		vv.Set(arena.NewBigInt(t.S))
 	} else {
-		vv.Set(arena.NewNull())
+		vv.Set(arena.NewBigInt(t.ChainId))
+		vv.Set(arena.NewUint(t.Nonce))
+		vv.Set(arena.NewBigInt(t.GasTipCap))
+		vv.Set(arena.NewBigInt(t.GasFeeCap))
+		vv.Set(arena.NewUint(t.Gas))
+
+		// Address may be empty
+		if t.To != nil {
+			vv.Set(arena.NewBytes((*t.To).Bytes()))
+		} else {
+			vv.Set(arena.NewNull())
+		}
+
+		vv.Set(arena.NewBigInt(t.Value))
+		vv.Set(arena.NewCopyBytes(t.Input))
+
+		vv.Set(arena.NewArray())
+
+		// signature values
+		vv.Set(arena.NewBigInt(t.V))
+		vv.Set(arena.NewBigInt(t.R))
+		vv.Set(arena.NewBigInt(t.S))
 	}
-
-	vv.Set(arena.NewBigInt(t.Value))
-	vv.Set(arena.NewCopyBytes(t.Input))
-
-	// signature values
-	vv.Set(arena.NewBigInt(t.V))
-	vv.Set(arena.NewBigInt(t.R))
-	vv.Set(arena.NewBigInt(t.S))
 
 	return vv
 }

@@ -77,6 +77,7 @@ type TxData interface {
 }
 
 type Transaction struct {
+	ChainId   *big.Int
 	Nonce     uint64
 	GasPrice  *big.Int
 	GasTipCap *big.Int
@@ -116,6 +117,7 @@ func (t *Transaction) ComputeHash() *Transaction {
 	ar := marshalArenaPool.Get()
 	hash := keccak.DefaultKeccakPool.Get()
 
+	hash.Write([]byte{2})
 	v := t.MarshalRLPWith(ar)
 	hash.WriteRlp(t.Hash[:0], v)
 

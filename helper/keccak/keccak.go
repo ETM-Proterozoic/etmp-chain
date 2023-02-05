@@ -1,6 +1,8 @@
 package keccak
 
 import (
+	"encoding/hex"
+	"fmt"
 	"hash"
 
 	"github.com/umbracle/fastrlp"
@@ -24,6 +26,16 @@ func (k *Keccak) WriteRlp(dst []byte, v *fastrlp.Value) []byte {
 	k.buf = v.MarshalTo(k.buf[:0])
 	//nolint
 	k.Write(k.buf)
+
+	return k.Sum(dst)
+}
+
+// WriteRlp writes an RLP value
+func (k *Keccak) WriteNewRlp(dst []byte, v *fastrlp.Value) []byte {
+	k.buf = v.MarshalTo(k.buf[:0])
+	//nolint
+	k.Write(k.buf)
+	fmt.Println("buf :", hex.EncodeToString(k.buf))
 
 	return k.Sum(dst)
 }

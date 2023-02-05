@@ -54,27 +54,53 @@ func calcTxHash(tx *types.Transaction, chainID uint64) types.Hash {
 	a := signerPool.Get()
 
 	v := a.NewArray()
-	v.Set(a.NewUint(tx.Nonce))
-	v.Set(a.NewBigInt(tx.GasPrice))
-	v.Set(a.NewUint(tx.Gas))
 
-	if tx.To == nil {
-		v.Set(a.NewNull())
+	var hash []byte
+
+	if tx.GasPrice != nil {
+		v.Set(a.NewUint(tx.Nonce))
+		v.Set(a.NewBigInt(tx.GasPrice))
+		v.Set(a.NewUint(tx.Gas))
+
+		if tx.To == nil {
+			v.Set(a.NewNull())
+		} else {
+			v.Set(a.NewCopyBytes((*tx.To).Bytes()))
+		}
+
+		v.Set(a.NewBigInt(tx.Value))
+		v.Set(a.NewCopyBytes(tx.Input))
+
+		// EIP155
+		if chainID != 0 {
+			v.Set(a.NewUint(chainID))
+			v.Set(a.NewUint(0))
+			v.Set(a.NewUint(0))
+		}
+
+		hash = keccak.Keccak256Rlp(nil, v)
 	} else {
-		v.Set(a.NewCopyBytes((*tx.To).Bytes()))
-	}
-
-	v.Set(a.NewBigInt(tx.Value))
-	v.Set(a.NewCopyBytes(tx.Input))
-
-	// EIP155
-	if chainID != 0 {
 		v.Set(a.NewUint(chainID))
-		v.Set(a.NewUint(0))
-		v.Set(a.NewUint(0))
-	}
+		v.Set(a.NewUint(tx.Nonce))
+		v.Set(a.NewBigInt(tx.GasTipCap))
+		v.Set(a.NewBigInt(tx.GasFeeCap))
+		v.Set(a.NewUint(tx.Gas))
 
-	hash := keccak.Keccak256Rlp(nil, v)
+		if tx.To == nil {
+			v.Set(a.NewNull())
+		} else {
+			v.Set(a.NewCopyBytes((*tx.To).Bytes()))
+		}
+
+		v.Set(a.NewBigInt(tx.Value))
+		v.Set(a.NewCopyBytes(tx.Input))
+		// v.Set(a.NewArray())
+
+		// b :=
+		v.Set(a.NewNullArray())
+
+		hash = keccak.Keccak256PrefixRlp(nil, 2, v)
+	}
 
 	signerPool.Put(a)
 

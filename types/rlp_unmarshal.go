@@ -408,11 +408,13 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 
 	p.Hash(t.Hash[:0], v)
 
+	// Todo: adpter legacy tx
+
 	// chainId
-	getElem().GetUint64()
-	// if t.Nonce, err = getElem().GetUint64(); err != nil {
-	// 	return err
-	// }
+	t.ChainId = new(big.Int)
+	if err = getElem().GetBigInt(t.ChainId); err != nil {
+		return err
+	}
 
 	// nonce
 	if t.Nonce, err = getElem().GetUint64(); err != nil {
@@ -465,7 +467,7 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 		return err
 	}
 
-	getElem() // Todo: Import skip accessList[]
+	getElem() // Todo: Important skip accessList[]
 
 	// V
 	t.V = new(big.Int)
