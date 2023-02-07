@@ -80,9 +80,11 @@ func calcTxHash(tx *types.Transaction, chainID uint64) types.Hash {
 
 		hash = keccak.Keccak256Rlp(nil, v)
 	} else {
+		// v.Set(a.NewUint(2))
 		v.Set(a.NewUint(chainID))
 		v.Set(a.NewUint(tx.Nonce))
 		v.Set(a.NewBigInt(tx.GasTipCap))
+		fmt.Printf(" %x \n", tx.GasTipCap)
 		v.Set(a.NewBigInt(tx.GasFeeCap))
 		v.Set(a.NewUint(tx.Gas))
 
@@ -94,11 +96,10 @@ func calcTxHash(tx *types.Transaction, chainID uint64) types.Hash {
 
 		v.Set(a.NewBigInt(tx.Value))
 		v.Set(a.NewCopyBytes(tx.Input))
-		// v.Set(a.NewArray())
 
-		// b :=
 		v.Set(a.NewNullArray())
 
+		// hash = keccak.Keccak256Rlp(nil, v)
 		hash = keccak.Keccak256PrefixRlp(nil, 2, v)
 	}
 

@@ -365,7 +365,9 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 	t.Type = LegacyTx
 	offset := 0
 
+	fmt.Printf("input %v", input)
 	if len(input) > 0 && input[0] <= RLPSingleByteUpperLimit {
+
 		var err error
 		if t.Type, err = txTypeFromByte(input[0]); err != nil {
 			return err
@@ -374,6 +376,7 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 		offset = 1
 	}
 
+	fmt.Println(" t.Type: ", t.Type)
 	return UnmarshalRlp(t.unmarshalRLPFrom, input[offset:])
 }
 
@@ -422,15 +425,15 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 	}
 
 	if t.Type == DynamicFeeTx {
-		// gasFeeCap
-		t.GasFeeCap = new(big.Int)
-		if err = getElem().GetBigInt(t.GasFeeCap); err != nil {
-			return err
-		}
-
 		// gasTipCap
 		t.GasTipCap = new(big.Int)
 		if err = getElem().GetBigInt(t.GasTipCap); err != nil {
+			return err
+		}
+
+		// gasFeeCap
+		t.GasFeeCap = new(big.Int)
+		if err = getElem().GetBigInt(t.GasFeeCap); err != nil {
 			return err
 		}
 	} else {
