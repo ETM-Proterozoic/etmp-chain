@@ -1,11 +1,14 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/umbracle/fastrlp"
 )
 
 const (
-	RLPSingleByteUpperLimit = 0x7f
+	// RLPSingleByteUpperLimit = 0x7f
+	RLPSingleByteUpperLimit = 0x8f
 )
 
 type RLPMarshaler interface {
@@ -163,6 +166,16 @@ func (t *Transaction) MarshalRLP() []byte {
 }
 
 func (t *Transaction) MarshalRLPTo(dst []byte) []byte {
+	fmt.Println("t.Type ---- ", t.Type)
+	if t.Type != LegacyTxType {
+		if t.Type == StateTx {
+			dst = append(dst, AccessListTxType)
+		} else if t.Type == DynamicFeeTx {
+			dst = append(dst, DynamicFeeTxType)
+		}
+
+	}
+
 	return MarshalRLPTo(t.MarshalRLPWith, dst)
 }
 

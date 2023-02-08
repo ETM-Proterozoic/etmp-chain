@@ -373,6 +373,8 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 			return err
 		}
 
+		// t.Type = TxType(input[0])
+
 		offset = 1
 	}
 
