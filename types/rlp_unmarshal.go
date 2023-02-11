@@ -3,7 +3,9 @@ package types
 import (
 	"fmt"
 	"math/big"
+	"runtime/debug"
 
+	"github.com/0xPolygon/polygon-edge/helper/keccak"
 	"github.com/umbracle/fastrlp"
 )
 
@@ -366,6 +368,7 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 	offset := 0
 
 	fmt.Printf("input %v", input)
+	debug.PrintStack()
 	if len(input) > 0 && input[0] <= RLPSingleByteUpperLimit {
 
 		var err error
@@ -411,14 +414,27 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 		return fmt.Errorf("incorrect number of transaction elements, expected %d but found %d", num, numElems)
 	}
 
-	p.Hash(t.Hash[:0], v)
+	if t.Type == LegacyTx {
+		p.Hash(t.Hash[:0], v)
+	} else {
+		p := keccak.DefaultKeccakPool.Get()
+		if t.Type == DynamicFeeTx {
+			p.Write([]byte{2})
+		} else {
+			p.Write([]byte{1})
+		}
+		p.WriteRlp(t.Hash[:0], v)
+		keccak.DefaultKeccakPool.Put(p)
+	}
 
 	// Todo: adpter legacy tx
 
-	// chainId
-	t.ChainId = new(big.Int)
-	if err = getElem().GetBigInt(t.ChainId); err != nil {
-		return err
+	if t.Type == DynamicFeeTx {
+		// chainId
+		t.ChainId = new(big.Int)
+		if err = getElem().GetBigInt(t.ChainId); err != nil {
+			return err
+		}
 	}
 
 	// nonce
@@ -472,7 +488,9 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 		return err
 	}
 
-	getElem() // Todo: Important skip accessList[]
+	if t.Type != LegacyTx {
+		getElem() // Todo: Important skip accessList[]
+	}
 
 	// V
 	t.V = new(big.Int)

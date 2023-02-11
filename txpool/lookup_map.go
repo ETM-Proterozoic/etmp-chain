@@ -1,7 +1,6 @@
 package txpool
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/0xPolygon/polygon-edge/types"
@@ -20,7 +19,6 @@ func (m *lookupMap) add(tx *types.Transaction) bool {
 	defer m.Unlock()
 
 	if _, exists := m.all[tx.Hash]; exists {
-		fmt.Println("tx already know ----") //Todo: Important Info
 		return false
 	}
 

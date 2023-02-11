@@ -116,6 +116,7 @@ type ForksInTime struct {
 	Constantinople,
 	Petersburg,
 	Istanbul,
+	London,
 	EIP150,
 	EIP158,
 	EIP155,
@@ -131,4 +132,5 @@ var AllForksEnabled = &Forks{
 	Constantinople: NewFork(0),
 	Petersburg:     NewFork(0),
 	Istanbul:       NewFork(0),
+	London:         NewFork(0),
 }

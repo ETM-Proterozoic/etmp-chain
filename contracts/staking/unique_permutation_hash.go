@@ -80,7 +80,6 @@ func convert(probe int, sequence []int) int {
 		return probe
 	}
 	sort.Ints(sequence)
-	// fmt.Println("seq ", sequence)
 	for index < len(sequence) && sequence[index] <= probe {
 		probe += 1
 		index += 1

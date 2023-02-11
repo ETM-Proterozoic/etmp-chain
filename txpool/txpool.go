@@ -605,7 +605,7 @@ func (p *TxPool) addTx(origin txOrigin, tx *types.Transaction) error {
 		return ErrTxPoolOverflow
 	}
 
-	tx.ComputeHash()
+	tx.ComputeHash() //Todo: before this hash is not correct
 
 	//	add to index
 	if ok := p.index.add(tx); !ok {

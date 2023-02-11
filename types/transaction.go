@@ -117,7 +117,14 @@ func (t *Transaction) ComputeHash() *Transaction {
 	ar := marshalArenaPool.Get()
 	hash := keccak.DefaultKeccakPool.Get()
 
-	hash.Write([]byte{2})
+	if t.GasPrice == nil {
+		if t.Type == DynamicFeeTx {
+			hash.Write([]byte{2})
+		} else {
+			hash.Write([]byte{1})
+		}
+	}
+
 	v := t.MarshalRLPWith(ar)
 	hash.WriteRlp(t.Hash[:0], v)
 
@@ -158,7 +165,7 @@ func (t *Transaction) Copy() *Transaction {
 }
 
 // Cost returns gas * gasPrice + value
-func (t *Transaction) Cost() *big.Int {
+func (t *Transaction) Cost() *big.Int { //Todo adpter eip1559
 	// total := new(big.Int).Mul(t.GasPrice, new(big.Int).SetUint64(t.Gas))
 	total := new(big.Int).Mul(t.GetGasPrice(), new(big.Int).SetUint64(t.Gas)) //Todo: Important, need improve
 	total.Add(total, t.Value)

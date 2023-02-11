@@ -43,6 +43,9 @@ func (t *Transaction) MarshalStoreRLPTo(dst []byte) []byte {
 
 func (t *Transaction) MarshalStoreRLPWith(a *fastrlp.Arena) *fastrlp.Value {
 	vv := a.NewArray()
+	if t.Type != LegacyTx { //ToRecord store
+		vv.Set(a.NewBytes([]byte{byte(t.Type)}))
+	}
 	// consensus part
 	vv.Set(t.MarshalRLPWith(a))
 	// context part

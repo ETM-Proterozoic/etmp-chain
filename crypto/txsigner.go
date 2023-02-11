@@ -199,6 +199,7 @@ func (e *EIP155Signer) Sender(tx *types.Transaction) (types.Address, error) {
 	vv := bigV.Uint64()
 	// if vv := bigV.Uint64(); bits.Len(uint(vv)) <= 8 {
 	if bits.Len(uint(vv)) <= 8 {
+
 		protected = vv != 27 && vv != 28
 	}
 
@@ -206,17 +207,12 @@ func (e *EIP155Signer) Sender(tx *types.Transaction) (types.Address, error) {
 		return (&FrontierSigner{}).Sender(tx)
 	}
 
-	if vv != 0 && vv != 1 { //eip1159 eip2930 eip 2718
+	if vv != 0 && vv != 1 { //eip1159 eip2930 eip2718
 		// Reverse the V calculation to find the original V in the range [0, 1]
 		// v = CHAIN_ID * 2 + 35 + {0, 1}
 		mulOperand := big.NewInt(0).Mul(big.NewInt(int64(e.chainID)), big.NewInt(2))
 		bigV.Sub(bigV, mulOperand)
 		bigV.Sub(bigV, big35)
-
-		intV := bigV.Int64()
-		fmt.Println("  intV : ", intV)
-		byteV := byte(bigV.Int64())
-		fmt.Println("  byteV : ", byteV)
 	}
 
 	sig, err := encodeSignature(tx.R, tx.S, byte(bigV.Int64()))

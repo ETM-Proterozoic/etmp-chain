@@ -106,6 +106,7 @@ type block struct {
 	Hash            types.Hash          `json:"hash"`
 	Transactions    []transactionOrHash `json:"transactions"`
 	Uncles          []types.Hash        `json:"uncles"`
+	BaseFee         argUint64           `json:"baseFee,omitempty"`
 }
 
 func toBlock(b *types.Block, fullTx bool) *block {
@@ -131,6 +132,7 @@ func toBlock(b *types.Block, fullTx bool) *block {
 		Hash:            h.Hash,
 		Transactions:    []transactionOrHash{},
 		Uncles:          []types.Hash{},
+		BaseFee:         argUint64(h.BaseFee),
 	}
 
 	for idx, txn := range b.Transactions {

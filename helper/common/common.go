@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -54,6 +55,15 @@ func ConvertUnmarshalledInt(x interface{}) (int64, error) {
 	default:
 		return 0, errors.New("unsupported type for unmarshalled integer")
 	}
+}
+
+// BigMin returns the smallest of x or y.
+func BigMin(x, y *big.Int) *big.Int {
+	if x.Cmp(y) > 0 {
+		return y
+	}
+
+	return x
 }
 
 func roundFloat(num float64) int64 {

@@ -18,6 +18,7 @@ type TxContext struct {
 	GasLimit   int64
 	ChainID    int64
 	Difficulty types.Hash
+	BaseFee    *big.Int //ToRecord
 }
 
 // StorageStatus is the status of the storage access

@@ -51,10 +51,12 @@ func trimLeftZeros(b []byte) []byte {
 func ValidateSignatureValues(v byte, r, s *big.Int) bool {
 	// TODO: ECDSA malleability
 	if r == nil || s == nil {
+		fmt.Println("fuck ------- 1")
 		return false
 	}
 
 	if v > 1 {
+		fmt.Println("fuck ------- 2", v)
 		return false
 	}
 
@@ -62,6 +64,7 @@ func ValidateSignatureValues(v byte, r, s *big.Int) bool {
 	rr = trimLeftZeros(rr)
 
 	if bytes.Compare(rr, secp256k1N) >= 0 || bytes.Compare(rr, one) < 0 {
+		fmt.Println("fuck ------- 3")
 		return false
 	}
 
@@ -69,6 +72,7 @@ func ValidateSignatureValues(v byte, r, s *big.Int) bool {
 	ss = trimLeftZeros(ss)
 
 	if bytes.Compare(ss, secp256k1N) >= 0 || bytes.Compare(ss, one) < 0 {
+		fmt.Println("fuck ------- 4")
 		return false
 	}
 

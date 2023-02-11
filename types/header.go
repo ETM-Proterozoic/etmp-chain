@@ -32,7 +32,7 @@ type Header struct {
 	Hash         Hash    `json:"hash"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
-	BaseFee uint64
+	BaseFee uint64 `json:"baseFee"`
 }
 
 // headerJSON represents a block header used for json calls
@@ -53,6 +53,7 @@ type headerJSON struct {
 	MixHash      Hash    `json:"mixHash"`
 	Nonce        Nonce   `json:"nonce"`
 	Hash         Hash    `json:"hash"`
+	BaseFee      string  `json:"baseFee"`
 }
 
 func (h *Header) MarshalJSON() ([]byte, error) {
@@ -76,6 +77,7 @@ func (h *Header) MarshalJSON() ([]byte, error) {
 	header.GasUsed = hex.EncodeUint64(h.GasUsed)
 	header.Timestamp = hex.EncodeUint64(h.Timestamp)
 	header.ExtraData = hex.EncodeToHex(h.ExtraData)
+	header.BaseFee = hex.EncodeUint64(h.BaseFee)
 
 	return json.Marshal(&header)
 }
@@ -120,6 +122,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 	}
 
 	if h.ExtraData, err = hex.DecodeHex(header.ExtraData); err != nil {
+		return err
+	}
+
+	if h.BaseFee, err = hex.DecodeUint64(header.BaseFee); err != nil {
 		return err
 	}
 
@@ -201,6 +207,7 @@ func (h *Header) Copy() *Header {
 		GasLimit:     h.GasLimit,
 		GasUsed:      h.GasUsed,
 		Timestamp:    h.Timestamp,
+		BaseFee:      h.BaseFee, //ToRecord tounder
 	}
 
 	newHeader.ExtraData = make([]byte, len(h.ExtraData))
