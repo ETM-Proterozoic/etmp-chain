@@ -28,10 +28,11 @@ func CalculateReceiptsRoot(receipts []*types.Receipt) types.Hash {
 func CalculateTransactionsRoot(transactions []*types.Transaction) types.Hash {
 	ar := arenaPool.Get()
 
-	res := calculateRootWithRlp(len(transactions), func(i int) *fastrlp.Value {
+	// res := calculateRootWithRlp(len(transactions), func(i int) *fastrlp.Value {÷÷
+	res := calculateRootWithTransaction(len(transactions), func(i int) *types.Transaction { //Todo record modify
 		ar.Reset()
 
-		return transactions[i].MarshalRLPWith(ar)
+		return transactions[i]
 	})
 
 	arenaPool.Put(ar)
@@ -62,6 +63,15 @@ func CalculateUncleRoot(uncles []*types.Header) types.Hash {
 func calculateRootWithRlp(num int, h func(indx int) *fastrlp.Value) types.Hash {
 	hF := func(indx int) []byte {
 		return h(indx).MarshalTo(nil)
+	}
+
+	return CalculateRoot(num, hF)
+}
+
+// Todo add new rlp function for specify tx
+func calculateRootWithTransaction(num int, h func(indx int) *types.Transaction) types.Hash {
+	hF := func(indx int) []byte {
+		return h(indx).MarshalRLP()
 	}
 
 	return CalculateRoot(num, hF)

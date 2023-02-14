@@ -179,6 +179,12 @@ func (t *Transaction) MarshalRLPTo(dst []byte) []byte {
 	return MarshalRLPTo(t.MarshalRLPWith, dst)
 }
 
+func (t *Transaction) MarshalRLPWithAr(arena *fastrlp.Arena) []byte {
+	var dst []byte
+	dst = t.MarshalRLPWith(arena).MarshalTo(dst)
+	return dst
+}
+
 // MarshalRLPWith marshals the transaction to RLP with a specific fastrlp.Arena
 func (t *Transaction) MarshalRLPWith(arena *fastrlp.Arena) *fastrlp.Value {
 	vv := arena.NewArray()

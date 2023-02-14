@@ -55,8 +55,8 @@ func toTransaction(
 	txIndex *int,
 ) *transaction {
 	res := &transaction{
-		Nonce:     argUint64(t.Nonce),
-		GasPrice:  argBig(*t.GasPrice),
+		Nonce: argUint64(t.Nonce),
+		// GasPrice:  argBig(*t.GasPrice),  //Todo: Optimize the logic
 		Gas:       argUint64(t.Gas),
 		To:        t.To,
 		Value:     argBig(*t.Value),
