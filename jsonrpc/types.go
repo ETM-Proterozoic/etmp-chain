@@ -56,18 +56,26 @@ func toTransaction(
 ) *transaction {
 	res := &transaction{
 		Nonce: argUint64(t.Nonce),
-		// GasPrice:  argBig(*t.GasPrice),  //Todo: Optimize the logic
-		Gas:       argUint64(t.Gas),
-		To:        t.To,
-		Value:     argBig(*t.Value),
-		Input:     t.Input,
-		V:         argBig(*t.V),
-		R:         argBig(*t.R),
-		S:         argBig(*t.S),
-		Hash:      t.Hash,
-		From:      t.From,
-		GasFeeCap: argBig(*t.GasFeeCap),
-		GasTipCap: argBig(*t.GasTipCap),
+		// GasPrice:  argBig(*t.GasPrice),
+		Gas:   argUint64(t.Gas),
+		To:    t.To,
+		Value: argBig(*t.Value),
+		Input: t.Input,
+		V:     argBig(*t.V),
+		R:     argBig(*t.R),
+		S:     argBig(*t.S),
+		Hash:  t.Hash,
+		From:  t.From,
+		// GasFeeCap: argBig(*t.GasFeeCap),
+		// GasTipCap: argBig(*t.GasTipCap),
+	}
+
+	switch t.Type {
+	case types.LegacyTx:
+		res.GasPrice = argBig(*t.GasPrice)
+	case types.StateTx, types.DynamicFeeTx:
+		res.GasFeeCap = argBig(*t.GasFeeCap)
+		res.GasTipCap = argBig(*t.GasTipCap)
 	}
 
 	if blockNumber != nil {

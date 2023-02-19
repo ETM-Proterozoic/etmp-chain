@@ -127,6 +127,7 @@ func (i *backendIBFT) buildBlock(snap *Snapshot, parent *types.Header) (*types.B
 		StateRoot:  types.EmptyRootHash, // this avoids needing state for now
 		Sha3Uncles: types.EmptyUncleHash,
 		GasLimit:   parent.GasLimit, // Inherit from parent for now, will need to adjust dynamically later.
+		BaseFee:    parent.BaseFee,  //Todo: Important confirm the basefee ???
 	}
 
 	// calculate gas limit based on parent header

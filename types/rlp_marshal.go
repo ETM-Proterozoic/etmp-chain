@@ -42,7 +42,37 @@ func (b *Block) MarshalRLPWith(ar *fastrlp.Arena) *fastrlp.Value {
 	} else {
 		v0 := ar.NewArray()
 		for _, tx := range b.Transactions {
-			v0.Set(tx.MarshalRLPWith(ar))
+			fmt.Printf(" #### tx.Type: %v \n", tx.Type)
+			if tx.Type == LegacyTx {
+				v0.Set(tx.MarshalRLPWith(ar))
+			} else {
+
+				// MarshalRLPTo(tx.MarshalRLPWith, buf)
+
+				// dst = obj(ar).MarshalTo(buf)
+
+				// arTmp := fastrlp.DefaultArenaPool.Get()
+				// buf := tx.MarshalRLPWith(arTmp).MarshalTo(nil)
+				// fastrlp.DefaultArenaPool.Put(arTmp)
+
+				dst := []byte{}
+				if tx.Type == StateTx {
+					dst = append(dst, byte(StateTx))
+				} else {
+					dst = append(dst, byte(DynamicFeeTx))
+				}
+
+				// buf := tx.MarshalRLPWith(ar).MarshalTo(nil)
+				// fmt.Printf(" buf ------- %v \n", buf)
+
+				// MarshalRLPTo(tx.MarshalRLPWith, dst)
+
+				// dst = append(dst, buf...)
+				fmt.Printf(" dst ------- %v \n", dst)
+
+				v0.Set(ar.NewCopyBytes(dst))
+				v0.Set(tx.MarshalRLPWith(ar))
+			}
 		}
 		vv.Set(v0)
 	}
@@ -162,18 +192,22 @@ func (l *Log) MarshalRLPWith(a *fastrlp.Arena) *fastrlp.Value {
 }
 
 func (t *Transaction) MarshalRLP() []byte {
-	return t.MarshalRLPTo(nil)
+
+	buf := t.MarshalRLPTo(nil)
+	fmt.Printf(" Marshal buf : %v", buf)
+
+	// return t.MarshalRLPTo(nil)
+	return buf
 }
 
 func (t *Transaction) MarshalRLPTo(dst []byte) []byte {
-	fmt.Println("t.Type ---- ", t.Type)
+	// fmt.Println("t.Type ---- ", t.Type)
 	if t.Type != LegacyTxType {
 		if t.Type == StateTx {
 			dst = append(dst, AccessListTxType)
 		} else if t.Type == DynamicFeeTx {
 			dst = append(dst, DynamicFeeTxType)
 		}
-
 	}
 
 	return MarshalRLPTo(t.MarshalRLPWith, dst)
@@ -235,3 +269,7 @@ func (t *Transaction) MarshalRLPWith(arena *fastrlp.Arena) *fastrlp.Value {
 
 	return vv
 }
+
+// func (t *Transaction) MarshalRLPWith(arena *fastrlp.Arena) *fastrlp.Value {
+
+// }

@@ -3,7 +3,6 @@ package types
 import (
 	"fmt"
 	"math/big"
-	"runtime/debug"
 
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
 	"github.com/umbracle/fastrlp"
@@ -70,8 +69,10 @@ func (t *TxType) unmarshalRLPFrom(_ *fastrlp.Parser, v *fastrlp.Value) error {
 	if err != nil {
 		return err
 	}
+	// fmt.Printf(" v.Bytes: %v \n", bytes)
 
 	if l := len(bytes); l != 1 {
+		// debug.PrintStack()
 		return fmt.Errorf("expected 1 byte transaction type, but size is %d", l)
 	}
 
@@ -79,6 +80,8 @@ func (t *TxType) unmarshalRLPFrom(_ *fastrlp.Parser, v *fastrlp.Value) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf(" Transaction Type: %v \n", tt)
 
 	*t = tt
 
@@ -117,6 +120,7 @@ func (b *Block) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) error {
 
 		bTxn = bTxn.ComputeHash()
 
+		// fmt.Println("#### Add Txns --------------")
 		b.Transactions = append(b.Transactions, bTxn)
 
 		return nil
@@ -367,8 +371,8 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 	t.Type = LegacyTx
 	offset := 0
 
-	fmt.Printf("input %v", input)
-	debug.PrintStack()
+	// fmt.Printf("input %v", input)
+	// debug.PrintStack()
 	if len(input) > 0 && input[0] <= RLPSingleByteUpperLimit {
 
 		var err error
@@ -381,7 +385,7 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 		offset = 1
 	}
 
-	fmt.Println(" t.Type: ", t.Type)
+	// fmt.Println(" t.Type: ", t.Type)
 	return UnmarshalRlp(t.unmarshalRLPFrom, input[offset:])
 }
 
@@ -511,7 +515,7 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 	}
 
 	if t.Type == StateTx {
-		fmt.Println(" Parse From --------- ")
+		// fmt.Println(" Parse From --------- ")
 		t.From = ZeroAddress
 
 		// We need to set From field for state transaction,

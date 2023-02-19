@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 
 	protoIBFT "github.com/0xPolygon/go-ibft/messages/proto"
@@ -32,6 +34,8 @@ func (i *backendIBFT) BuildPrePrepareMessage(
 ) *protoIBFT.Message {
 	block := &types.Block{}
 	if err := block.UnmarshalRLP(proposal); err != nil {
+		// fmt.Printf(" proposal: %v ", proposal)
+		fmt.Printf(" block.UnmarshalRLP: %v ", err)
 		return nil
 	}
 

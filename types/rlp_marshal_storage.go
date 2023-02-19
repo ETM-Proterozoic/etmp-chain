@@ -1,6 +1,9 @@
 package types
 
 import (
+	"fmt"
+	"runtime/debug"
+
 	"github.com/umbracle/fastrlp"
 )
 
@@ -43,13 +46,21 @@ func (t *Transaction) MarshalStoreRLPTo(dst []byte) []byte {
 
 func (t *Transaction) MarshalStoreRLPWith(a *fastrlp.Arena) *fastrlp.Value {
 	vv := a.NewArray()
-	if t.Type != LegacyTx { //ToRecord store
+	if t.Type != LegacyTx { //Todo: ToRecord store
+		// if t.Type == StateTx {
+		// 	vv.Set(a.NewBytes([]byte{byte(AccessListTxType)}))
+		// } else {
+		// 	vv.Set(a.NewBytes([]byte{byte(DynamicFeeTxType)}))
+		// }
 		vv.Set(a.NewBytes([]byte{byte(t.Type)}))
 	}
 	// consensus part
 	vv.Set(t.MarshalRLPWith(a))
 	// context part
+	fmt.Printf(" t.From ---------- %v", t.From.Bytes())
 	vv.Set(a.NewBytes(t.From.Bytes()))
+
+	debug.PrintStack()
 
 	return vv
 }

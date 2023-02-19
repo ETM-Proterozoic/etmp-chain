@@ -305,6 +305,7 @@ func (t *Transition) Write(txn *types.Transaction) error {
 	if txn.From == emptyFrom {
 		// Decrypt the from address
 		txn.From, err = signer.Sender(txn)
+		fmt.Printf(" ------emptyFrom: %v ", txn.From)
 		if err != nil {
 			return NewTransitionApplicationError(err, false)
 		}
@@ -444,6 +445,7 @@ func (t *Transition) nonceCheck(msg *types.Transaction) error {
 	nonce := t.state.GetNonce(msg.From)
 
 	if nonce != msg.Nonce {
+		fmt.Println("#### nonce --- ", nonce, " msg.Nonce: ", msg.Nonce)
 		return ErrNonceIncorrect
 	}
 
@@ -569,6 +571,7 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 	if balance := txn.GetBalance(msg.From); balance.Cmp(msg.Value) < 0 {
+		fmt.Printf(" from: %v, balance : %v , msg.Value : %v \n", msg.From, txn.GetBalance(msg.From), msg.Value)
 		return nil, NewTransitionApplicationError(ErrNotEnoughFunds, true)
 	}
 
@@ -598,7 +601,7 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 	// We use EIP-1559 fields of the tx if the london hardfork is enabled.
 	// Effective tip be came to be either gas tip cap or (gas fee cap - current base fee)
 	effectiveTip := msg.GasPrice
-	if t.config.London && msg.Type != types.StateTx {
+	if t.config.London && msg.Type != types.LegacyTx {
 		effectiveTip = common.BigMin(
 			new(big.Int).Sub(msg.GasFeeCap, t.ctx.BaseFee),
 			new(big.Int).Set(msg.GasTipCap),

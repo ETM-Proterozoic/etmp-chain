@@ -534,7 +534,6 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 
 	// If no address was set, update it
 	if tx.From == types.ZeroAddress {
-		fmt.Println(" None From")
 		tx.From = from
 	}
 

@@ -324,6 +324,7 @@ func (b *Blockchain) SetConsensus(c Verifier) {
 
 // setCurrentHeader sets the current header
 func (b *Blockchain) setCurrentHeader(h *types.Header, diff *big.Int) {
+	// debug.PrintStack() //Todo: call chain
 	// Update the header (atomic)
 	header := h.Copy()
 	b.currentHeader.Store(header)
@@ -972,7 +973,8 @@ func (b *Blockchain) updateGasPriceAvgWithBlock(block *types.Block) {
 
 	gasPrices := make([]*big.Int, len(block.Transactions))
 	for i, transaction := range block.Transactions {
-		gasPrices[i] = transaction.GasPrice
+		// gasPrices[i] = transaction.GasPrice
+		gasPrices[i] = transaction.GetGasPrice() //Todo: Record Important
 	}
 
 	b.updateGasPriceAvg(gasPrices)
@@ -986,6 +988,10 @@ func (b *Blockchain) writeBody(block *types.Block) error {
 	// Write the full body (txns + receipts)
 	if err := b.db.WriteBody(block.Header.Hash, body); err != nil {
 		return err
+	}
+
+	if len(block.Transactions) != 0 {
+		fmt.Println("##### Tx size: ", len(block.Transactions))
 	}
 
 	// Write txn lookups (txHash -> block)
@@ -1279,6 +1285,7 @@ func (b *Blockchain) GetBlockByHash(hash types.Hash, full bool) (*types.Block, b
 		return block, false
 	}
 
+	// fmt.Println("##### GetBlockByHash  ###")
 	// Set the transactions and uncles
 	block.Transactions = body.Transactions
 	block.Uncles = body.Uncles

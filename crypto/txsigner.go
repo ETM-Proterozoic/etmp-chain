@@ -225,8 +225,6 @@ func (e *EIP155Signer) Sender(tx *types.Transaction) (types.Address, error) {
 		return types.Address{}, err
 	}
 
-	fmt.Println(" #######  buf : ", pub[0])
-
 	buf := Keccak256(pub[1:])[12:]
 
 	return types.BytesToAddress(buf), nil
