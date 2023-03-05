@@ -385,7 +385,6 @@ func (t *Transaction) UnmarshalRLP(input []byte) error {
 		offset = 1
 	}
 
-	// fmt.Println(" t.Type: ", t.Type)
 	return UnmarshalRlp(t.unmarshalRLPFrom, input[offset:])
 }
 
@@ -515,7 +514,6 @@ func (t *Transaction) unmarshalRLPFrom(p *fastrlp.Parser, v *fastrlp.Value) erro
 	}
 
 	if t.Type == StateTx {
-		// fmt.Println(" Parse From --------- ")
 		t.From = ZeroAddress
 
 		// We need to set From field for state transaction,

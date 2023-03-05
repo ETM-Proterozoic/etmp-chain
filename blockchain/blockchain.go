@@ -990,10 +990,6 @@ func (b *Blockchain) writeBody(block *types.Block) error {
 		return err
 	}
 
-	if len(block.Transactions) != 0 {
-		fmt.Println("##### Tx size: ", len(block.Transactions))
-	}
-
 	// Write txn lookups (txHash -> block)
 	for _, txn := range block.Transactions {
 		if err := b.db.WriteTxLookup(txn.Hash, block.Hash()); err != nil {
@@ -1285,7 +1281,6 @@ func (b *Blockchain) GetBlockByHash(hash types.Hash, full bool) (*types.Block, b
 		return block, false
 	}
 
-	// fmt.Println("##### GetBlockByHash  ###")
 	// Set the transactions and uncles
 	block.Transactions = body.Transactions
 	block.Uncles = body.Uncles

@@ -209,7 +209,6 @@ func (k *KmsSecretManager) SignBySecret(key string, chainId int, data []byte) ([
 	beginTime := time.Now().UnixNano()
 	resp, err := k.client.Post(k.serverURL, "application/json", bytes.NewBuffer(bs))
 	if err != nil {
-		fmt.Println("http post errr", err)
 		return nil, err
 	}
 	endTime := time.Now().UnixNano()
@@ -218,7 +217,7 @@ func (k *KmsSecretManager) SignBySecret(key string, chainId int, data []byte) ([
 	)
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Status code err", resp.StatusCode)
+		// fmt.Println("Status code err", resp.StatusCode)
 		return nil, fmt.Errorf("http status error %d", resp.StatusCode)
 	}
 
@@ -303,13 +302,13 @@ func (k *KmsSecretManager) GetSecretInfo(name string) (*secrets.SecretInfo, erro
 
 	resp, err := k.client.Post(k.serverURL, "application/json", bytes.NewBuffer(bs))
 	if err != nil {
-		fmt.Println("http post errr", err)
+		// fmt.Println("http post errr", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Status code err", resp.StatusCode)
+		// fmt.Println("Status code err", resp.StatusCode)
 		return nil, errors.New("http status error")
 	}
 

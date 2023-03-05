@@ -22,7 +22,6 @@ type Keccak struct {
 // WriteRlp writes an RLP value
 func (k *Keccak) WriteRlp(dst []byte, v *fastrlp.Value) []byte {
 	k.buf = v.MarshalTo(k.buf[:0])
-	// fmt.Println("buf :", hex.EncodeToString(k.buf))
 	//nolint
 	k.Write(k.buf)
 
@@ -31,12 +30,6 @@ func (k *Keccak) WriteRlp(dst []byte, v *fastrlp.Value) []byte {
 
 // WriteRlp writes an RLP value
 func (k *Keccak) WriteNewRlp(dst []byte, v *fastrlp.Value) []byte {
-	// k.buf = append(k.buf, 0x2)
-	// buf := v.MarshalTo(k.buf[1:])
-	// k.buf = append(k.buf, buf...)
-	// fmt.Println("buf :", hex.EncodeToString(k.buf))
-	// fmt.Printf("%v", k.buf)
-
 	k.buf = v.MarshalTo(k.buf[:0])
 
 	//nolint

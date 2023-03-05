@@ -71,6 +71,7 @@ func (g *Genesis) GenesisHeader() *types.Header {
 		ExtraData:    g.ExtraData,
 		GasLimit:     g.GasLimit,
 		GasUsed:      g.GasUsed,
+		BaseFee:      g.BaseFee,
 		Difficulty:   g.Difficulty,
 		MixHash:      g.Mixhash,
 		Miner:        g.Coinbase,

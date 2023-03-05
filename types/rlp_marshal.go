@@ -194,7 +194,7 @@ func (l *Log) MarshalRLPWith(a *fastrlp.Arena) *fastrlp.Value {
 func (t *Transaction) MarshalRLP() []byte {
 
 	buf := t.MarshalRLPTo(nil)
-	fmt.Printf(" Marshal buf : %v", buf)
+	// fmt.Printf(" Marshal buf : %v", buf)
 
 	// return t.MarshalRLPTo(nil)
 	return buf

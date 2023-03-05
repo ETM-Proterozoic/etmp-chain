@@ -555,10 +555,6 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 		return ErrInvalidAccountState
 	}
 
-	fmt.Printf("Debug Tx : %+v", tx)
-
-	fmt.Println("Debug accout balance : ", accountBalance.Uint64(), " tx.From: ", tx.From)
-
 	// Check if the sender has enough funds to execute the transaction
 	if accountBalance.Cmp(tx.Cost()) < 0 {
 		return ErrInsufficientFunds

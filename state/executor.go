@@ -445,7 +445,6 @@ func (t *Transition) nonceCheck(msg *types.Transaction) error {
 	nonce := t.state.GetNonce(msg.From)
 
 	if nonce != msg.Nonce {
-		fmt.Println("#### nonce --- ", nonce, " msg.Nonce: ", msg.Nonce)
 		return ErrNonceIncorrect
 	}
 

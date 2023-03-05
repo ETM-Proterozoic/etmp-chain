@@ -506,7 +506,6 @@ func (j *jsonRPCHub) ApplyTxn(
 	header *types.Header,
 	txn *types.Transaction,
 ) (result *runtime.ExecutionResult, err error) {
-	fmt.Println(" ApplyTxn ------------- fuck !!!!!!  ")
 	blockCreator, err := j.GetConsensus().GetBlockCreator(header)
 	if err != nil {
 		return nil, err
