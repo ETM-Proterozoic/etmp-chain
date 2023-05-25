@@ -262,7 +262,8 @@ func (s *Server) Start() error {
 	}
 
 	go s.runDial()
-	go s.checkPeerConnections()
+	//go s.checkPeerConnections()
+	go s.keepAliveMinimumPeerConnections()
 
 	// watch for disconnected peers
 	s.host.Network().Notify(&network.NotifyBundle{
@@ -319,7 +320,7 @@ func (s *Server) setupBootnodes() error {
 }
 
 // checkPeerCount will attempt to make new connections if the active peer count is lesser than the specified limit.
-func (s *Server) checkPeerConnections() {
+func (s *Server) keepAliveMinimumPeerConnections() {
 	for {
 		select {
 		case <-time.After(10 * time.Second):
@@ -330,9 +331,18 @@ func (s *Server) checkPeerConnections() {
 		if s.numPeers() < MinimumPeerConnections {
 			if s.config.NoDiscover || !s.bootnodes.hasBootnodes() {
 				//TODO: dial peers from the peerstore
+				// dial unconnected peer
+				randPeer := s.GetRandomPeer()
+				if randPeer != nil && !s.IsConnected(*randPeer) {
+					s.addToDialQueue(s.GetPeerInfo(*randPeer), common.PriorityRandomDial)
+				}
 			} else {
 				randomNode := s.GetRandomBootnode()
 				s.addToDialQueue(randomNode, common.PriorityRandomDial)
+				// dial random unconnected bootnode
+				if randomNode := s.GetRandomBootnode(); randomNode != nil {
+					s.addToDialQueue(randomNode, common.PriorityRandomDial)
+				}
 			}
 		}
 	}
@@ -397,7 +407,7 @@ func (s *Server) runDial() {
 				// the connection process is async because it involves connection (here) +
 				// the handshake done in the identity service.
 				if err := s.host.Connect(context.Background(), *peerInfo); err != nil {
-					s.logger.Debug("failed to dial", "addr", peerInfo.String(), "err", err)
+					s.logger.Debug("failed to dial", "addr", peerInfo.String(), "err", err.Error())
 
 					s.emitEvent(peerInfo.ID, peerEvent.PeerFailedToConnect)
 				}
