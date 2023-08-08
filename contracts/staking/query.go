@@ -2,6 +2,7 @@ package staking
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/umbracle/ethgo"
@@ -53,7 +54,7 @@ func createCallViewTx(
 	methodID []byte,
 	nonce uint64,
 ) *types.Transaction {
-	return &types.Transaction{
+	t := &types.Transaction{
 		From:     from,
 		To:       &contractAddress,
 		Input:    methodID,
@@ -62,6 +63,9 @@ func createCallViewTx(
 		Value:    big.NewInt(0),
 		GasPrice: big.NewInt(0),
 	}
+
+	fmt.Printf("###### createCallViewTx %+v \n", t)
+	return t
 }
 
 // DecodeValidators parses contract call result and returns array of address
@@ -70,6 +74,8 @@ func DecodeValidators(method *abi.Method, returnValue []byte) ([]types.Address, 
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf(" decodedResults %+v ######## \n ", decodedResults)
 
 	results, ok := decodedResults.(map[string]interface{})
 	if !ok {
@@ -116,6 +122,8 @@ func QueryValidators(t TxQueryHandler, from types.Address) ([]types.Address, err
 		method.ID(),
 		t.GetNonce(from),
 	))
+
+	fmt.Printf("get validators res ###### %+v \n", res)
 
 	if err != nil {
 		return nil, err

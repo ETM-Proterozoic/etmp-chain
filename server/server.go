@@ -133,7 +133,7 @@ func NewServer(config *Config) (*Server, error) {
 		grpcServer:         grpc.NewServer(),
 		restoreProgression: progress.NewProgressionWrapper(progress.ChainSyncRestore),
 	}
-	fmt.Println("fuck ##########")
+
 	m.logger.Info("Data dir", "path", config.DataDir)
 
 	// Generate all the paths in the dataDir

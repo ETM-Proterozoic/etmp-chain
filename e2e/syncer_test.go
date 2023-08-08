@@ -24,6 +24,8 @@ func TestClusterBlockSync(t *testing.T) {
 			t,
 			IBFTMinNodes+numNonValidators,
 			IBFTDirPrefix, func(i int, config *framework.TestServerConfig) {
+				config.SetValidatorType(validatorType)
+
 				if i >= IBFTMinNodes {
 					// Other nodes should not be in the validator set
 					dirPrefix := "polygon-edge-non-validator-"
