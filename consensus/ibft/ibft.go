@@ -112,6 +112,7 @@ func Factory(params *consensus.Params) (consensus.Consensus, error) {
 		epochSize = uint64(readSize)
 	}
 
+	//fmt.Printf(" ----------------- Config: %+v  \n", params.Config.Config)
 	if rawBlockNum, ok := params.Config.Config["quorumSizeBlockNum"]; ok {
 		// Block number specified for quorum size switch
 		readBlockNum, ok := rawBlockNum.(float64)
@@ -445,9 +446,11 @@ func (i *backendIBFT) VerifyHeader(header *types.Header) error {
 // number of votes required to reach quorum based on the size of the set.
 // The blockNumber argument indicates which formula was used to calculate the result (see PRs #513, #549)
 func (i *backendIBFT) quorumSize(blockNumber uint64) QuorumImplementation {
+	fmt.Printf(" i.quorumSizeBlockNum %d  \n ", i.quorumSizeBlockNum)
 	if blockNumber < i.quorumSizeBlockNum {
 		return LegacyQuorumSize
 	}
+	// fmt.Println("LegacyQuorumSize ", LegacyQuorumSize, " OptimalQuorumSize ", OptimalQuorumSize)
 
 	return OptimalQuorumSize
 }

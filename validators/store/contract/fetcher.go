@@ -36,6 +36,9 @@ func FetchECDSAValidators(
 		return nil, err
 	}
 
+	fmt.Printf("############ get validators len ###### %d \n", len(valAddrs))
+	//debug.PrintStack()
+
 	ecdsaValidators := validators.NewECDSAValidatorSet()
 	for _, addr := range valAddrs {
 		if err := ecdsaValidators.Add(validators.NewECDSAValidator(addr)); err != nil {
