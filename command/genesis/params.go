@@ -302,6 +302,9 @@ func (p *genesisParams) initGenesisConfig() error {
 		Bootnodes: p.bootnodes,
 	}
 
+	chainConfig.Genesis.BaseFee = command.DefaultGenesisBaseFee
+	chainConfig.Genesis.BaseFeeEM = command.DefaultGenesisBaseFeeEM
+
 	// Predeploy staking smart contract if needed
 	if p.shouldPredeployStakingSC() {
 		stakingAccount, err := p.predeployStakingSC()

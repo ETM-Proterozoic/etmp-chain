@@ -9,6 +9,11 @@ import (
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
 )
 
+const (
+	// StateTransactionGasLimit is arbitrary default gas limit for state transactions
+	StateTransactionGasLimit = 1000000
+)
+
 // Transaction types.
 const (
 	LegacyTxType = iota

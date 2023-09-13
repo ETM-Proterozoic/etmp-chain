@@ -55,6 +55,11 @@ var (
 	ErrMaxEnqueuedLimitReached = errors.New("maximum number of enqueued transactions reached")
 	ErrRejectFutureTx          = errors.New("rejected future tx due to low slots")
 	ErrSmartContractRestricted = errors.New("smart contract deployment restricted")
+	ErrInvalidTxType           = errors.New("invalid tx type")
+	ErrTipVeryHigh             = errors.New("max priority fee per gas higher than 2^256-1")
+	ErrFeeCapVeryHigh          = errors.New("max fee per gas higher than 2^256-1")
+	ErrDynamicTxNotAllowed     = errors.New("dynamic tx not allowed currently")
+	ErrTipAboveFeeCap          = errors.New("max priority fee per gas higher than max fee per gas")
 )
 
 // indicates origin of a transaction
@@ -185,6 +190,10 @@ type TxPool struct {
 	// pending is the list of pending and ready transactions. This variable
 	// is accessed with atomics
 	pending int64
+
+	// baseFee is the base fee of the current head.
+	// This is needed to sort transactions by price
+	baseFee uint64
 }
 
 // deploymentWhitelist map which contains all addresses which can deploy contracts
@@ -235,7 +244,7 @@ func NewTxPool(
 		logger:      logger.Named("txpool"),
 		forks:       forks,
 		store:       store,
-		executables: newPricedQueue(),
+		executables: newPricesQueue(0, nil),
 		accounts:    accountsMap{maxEnqueuedLimit: config.MaxAccountEnqueued},
 		index:       lookupMap{all: make(map[types.Hash]*types.Transaction)},
 		gauge:       slotGauge{height: 0, max: config.MaxSlots},
@@ -247,6 +256,7 @@ func NewTxPool(
 		pruneCh:      make(chan struct{}),
 		shutdownCh:   make(chan struct{}),
 	}
+	fmt.Printf(" ------ London param %+v ", forks)
 
 	// Attach the event manager
 	pool.eventManager = newEventManager(pool.logger)
@@ -377,19 +387,15 @@ func (p *TxPool) AddTx(tx *types.Transaction) error {
 
 // Prepare generates all the transactions
 // ready for execution. (primaries)
-func (p *TxPool) Prepare() {
-	// clear from previous round
-	if p.executables.length() != 0 {
-		p.executables.clear()
-	}
+func (p *TxPool) Prepare(baseFee uint64) {
+	// set base fee
+	atomic.StoreUint64(&p.baseFee, baseFee)
 
 	// fetch primary from each account
 	primaries := p.accounts.getPrimaries()
 
-	// push primaries to the executables queue
-	for _, tx := range primaries {
-		p.executables.push(tx)
-	}
+	// create new executables queue with base fee and initial transactions (primaries)
+	p.executables = newPricesQueue(baseFee, primaries)
 }
 
 // Peek returns the best-price selected
@@ -429,6 +435,7 @@ func (p *TxPool) Pop(tx *types.Transaction) {
 
 	// update executables
 	if tx := account.promoted.peek(); tx != nil {
+		fmt.Print(" ----------  tx Pop  ")
 		p.executables.push(tx)
 	}
 }
@@ -604,6 +611,11 @@ func (p *TxPool) processEvent(event *blockchain.Event) {
 // validateTx ensures the transaction conforms to specific
 // constraints before entering the pool.
 func (p *TxPool) validateTx(tx *types.Transaction) error {
+	// Check the transaction type. State transactions are not expected to be added to the pool
+	if tx.Type == types.StateTx {
+		return ErrInvalidTxType
+	}
+
 	// Check the transaction size to overcome DOS Attacks
 	if uint64(len(tx.MarshalRLP())) > txMaxSize {
 		return ErrOversizedData
@@ -618,7 +630,10 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 
 	// Extract the sender
 	from, signerErr := p.signer.Sender(tx)
+	fmt.Printf(" tx: %+v", tx)
+	// debug.PrintStack()
 	if signerErr != nil {
+		fmt.Println(" signerErr ", signerErr)
 		return ErrExtractSignature
 	}
 
@@ -639,9 +654,63 @@ func (p *TxPool) validateTx(tx *types.Transaction) error {
 		return ErrSmartContractRestricted
 	}
 
-	// Reject underpriced transactions
-	if tx.IsUnderpriced(p.priceLimit) {
-		return ErrUnderpriced
+	if tx.Type == types.DynamicFeeTx {
+		// Reject dynamic fee tx if london hardfork is not enabled
+		fmt.Println(" ######## is London: ", p.forks.London)
+		if !p.forks.London {
+
+			metrics.IncrCounter([]string{txPoolMetrics, "invalid_tx_type"}, 1)
+
+			return ErrInvalidTxType
+		}
+
+		// Todo: important
+		// // DynamicFeeTx should be rejected if TxHashWithType fork is registered but not enabled for current block
+		// blockNumber, err := forkmanager.GetInstance().GetForkBlock(chain.TxHashWithType)
+		// if err == nil && blockNumber > p.store.Header().Number {
+		// 	metrics.IncrCounter([]string{txPoolMetrics, "dynamic_tx_not_allowed"}, 1)
+
+		// 	return ErrDynamicTxNotAllowed
+		// }
+
+		// Check EIP-1559-related fields and make sure they are correct
+		if tx.GasFeeCap == nil || tx.GasTipCap == nil {
+			metrics.IncrCounter([]string{txPoolMetrics, "underpriced_tx"}, 1)
+
+			return ErrUnderpriced
+		}
+
+		if tx.GasFeeCap.BitLen() > 256 {
+			metrics.IncrCounter([]string{txPoolMetrics, "fee_cap_too_high_dynamic_tx"}, 1)
+
+			return ErrFeeCapVeryHigh
+		}
+
+		if tx.GasTipCap.BitLen() > 256 {
+			metrics.IncrCounter([]string{txPoolMetrics, "tip_too_high_dynamic_tx"}, 1)
+
+			return ErrTipVeryHigh
+		}
+
+		if tx.GasFeeCap.Cmp(tx.GasTipCap) < 0 {
+			metrics.IncrCounter([]string{txPoolMetrics, "tip_above_fee_cap_dynamic_tx"}, 1)
+
+			return ErrTipAboveFeeCap
+		}
+
+		// Reject underpriced transactions
+		if tx.GasFeeCap.Cmp(new(big.Int).SetUint64(p.GetBaseFee())) < 0 {
+			metrics.IncrCounter([]string{txPoolMetrics, "underpriced_tx"}, 1)
+
+			return ErrUnderpriced
+		}
+	} else {
+		// Legacy approach to check if the given tx is not underpriced
+		if tx.GetGasPrice(p.GetBaseFee()).Cmp(big.NewInt(0).SetUint64(p.priceLimit)) < 0 {
+			metrics.IncrCounter([]string{txPoolMetrics, "underpriced_tx"}, 1)
+
+			return ErrUnderpriced
+		}
 	}
 
 	// Grab the state root for the latest block
@@ -760,6 +829,14 @@ func (p *TxPool) addTx(origin txOrigin, tx *types.Transaction) error {
 	// send request [BLOCKING]
 	p.enqueueReqCh <- enqueueRequest{tx: tx}
 	p.eventManager.signalEvent(proto.EventType_ADDED, tx.Hash)
+
+	/*
+		move
+			0,1 1,1  // up to one step
+
+
+
+	*/
 
 	return nil
 }

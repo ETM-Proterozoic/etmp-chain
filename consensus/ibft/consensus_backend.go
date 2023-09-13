@@ -169,6 +169,7 @@ func (i *backendIBFT) buildBlock(parent *types.Header) (*types.Block, error) {
 		StateRoot:  types.EmptyRootHash, // this avoids needing state for now
 		Sha3Uncles: types.EmptyUncleHash,
 		GasLimit:   parent.GasLimit, // Inherit from parent for now, will need to adjust dynamically later.
+		BaseFee:    i.blockchain.CalculateBaseFee(parent),
 	}
 
 	// calculate gas limit based on parent header
@@ -176,6 +177,9 @@ func (i *backendIBFT) buildBlock(parent *types.Header) (*types.Block, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// calculate base fee
+	baseFee := i.blockchain.CalculateBaseFee(parent)
 
 	header.GasLimit = gasLimit
 
@@ -205,6 +209,7 @@ func (i *backendIBFT) buildBlock(parent *types.Header) (*types.Block, error) {
 
 	txs := i.writeTransactions(
 		writeCtx,
+		baseFee,
 		gasLimit,
 		header.Number,
 		transition,
@@ -287,6 +292,7 @@ type transitionInterface interface {
 
 func (i *backendIBFT) writeTransactions(
 	writeCtx context.Context,
+	baseFee,
 	gasLimit,
 	blockNumber uint64,
 	transition transitionInterface,
@@ -313,7 +319,7 @@ func (i *backendIBFT) writeTransactions(
 		)
 	}()
 
-	i.txpool.Prepare()
+	i.txpool.Prepare(baseFee)
 
 write:
 	for {

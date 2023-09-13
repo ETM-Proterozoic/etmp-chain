@@ -1,6 +1,7 @@
 package jsonrpc
 
 import (
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -16,7 +17,9 @@ type transactionOrHash interface {
 
 type transaction struct {
 	Nonce       argUint64      `json:"nonce"`
-	GasPrice    argBig         `json:"gasPrice"`
+	GasPrice    *argBig        `json:"gasPrice,omitempty"`
+	GasTipCap   *argBig        `json:"maxPriorityFeePerGas,omitempty"`
+	GasFeeCap   *argBig        `json:"maxFeePerGas,omitempty"`
 	Gas         argUint64      `json:"gas"`
 	To          *types.Address `json:"to"`
 	Value       argBig         `json:"value"`
@@ -29,6 +32,8 @@ type transaction struct {
 	BlockHash   *types.Hash    `json:"blockHash"`
 	BlockNumber *argUint64     `json:"blockNumber"`
 	TxIndex     *argUint64     `json:"transactionIndex"`
+	ChainID     *argBig        `json:"chainID,omitempty"`
+	Type        argUint64      `json:"type"`
 }
 
 func (t transaction) getHash() types.Hash { return t.Hash }
@@ -53,25 +58,40 @@ func toTransaction(
 	txIndex *int,
 ) *transaction {
 	res := &transaction{
-		Nonce:    argUint64(t.Nonce),
-		GasPrice: argBig(*t.GasPrice),
-		Gas:      argUint64(t.Gas),
-		To:       t.To,
-		Value:    argBig(*t.Value),
-		Input:    t.Input,
-		V:        argBig(*t.V),
-		R:        argBig(*t.R),
-		S:        argBig(*t.S),
-		Hash:     t.Hash,
-		From:     t.From,
+		Nonce: argUint64(t.Nonce),
+		// GasPrice: argBig(*t.GasPrice),
+		Gas:         argUint64(t.Gas),
+		To:          t.To,
+		Value:       argBig(*t.Value),
+		Input:       t.Input,
+		V:           argBig(*t.V),
+		R:           argBig(*t.R),
+		S:           argBig(*t.S),
+		Hash:        t.Hash,
+		Type:        argUint64(t.Type),
+		BlockNumber: blockNumber,
+		BlockHash:   blockHash,
 	}
 
-	if blockNumber != nil {
-		res.BlockNumber = blockNumber
+	if t.GasPrice != nil {
+		fmt.Println(" ###Print#### t.GasPrice -------- ", t.GasPrice)
+		gasPrice := argBig(*t.GasPrice)
+		res.GasPrice = &gasPrice
 	}
 
-	if blockHash != nil {
-		res.BlockHash = blockHash
+	if t.GasTipCap != nil {
+		gasTipCap := argBig(*t.GasTipCap)
+		res.GasTipCap = &gasTipCap
+	}
+
+	if t.GasFeeCap != nil {
+		gasFeeCap := argBig(*t.GasFeeCap)
+		res.GasFeeCap = &gasFeeCap
+	}
+
+	if t.ChainID != nil {
+		chainID := argBig(*t.ChainID)
+		res.ChainID = &chainID
 	}
 
 	if txIndex != nil {
@@ -102,6 +122,7 @@ type block struct {
 	Hash            types.Hash          `json:"hash"`
 	Transactions    []transactionOrHash `json:"transactions"`
 	Uncles          []types.Hash        `json:"uncles"`
+	BaseFee         argUint64           `json:"baseFeePerGas,omitempty"`
 }
 
 func (b *block) Copy() *block {
@@ -140,6 +161,7 @@ func toBlock(b *types.Block, fullTx bool) *block {
 		Hash:            h.Hash,
 		Transactions:    []transactionOrHash{},
 		Uncles:          []types.Hash{},
+		BaseFee:         argUint64(h.BaseFee),
 	}
 
 	for idx, txn := range b.Transactions {
@@ -307,14 +329,17 @@ func encodeToHex(b []byte) []byte {
 
 // txnArgs is the transaction argument for the rpc endpoints
 type txnArgs struct {
-	From     *types.Address
-	To       *types.Address
-	Gas      *argUint64
-	GasPrice *argBytes
-	Value    *argBytes
-	Data     *argBytes
-	Input    *argBytes
-	Nonce    *argUint64
+	From      *types.Address
+	To        *types.Address
+	Gas       *argUint64
+	GasPrice  *argBytes
+	GasTipCap *argBytes
+	GasFeeCap *argBytes
+	Value     *argBytes
+	Data      *argBytes
+	Input     *argBytes
+	Nonce     *argUint64
+	Type      *argUint64
 }
 
 type progression struct {

@@ -273,7 +273,7 @@ func (k *KmsSecretManager) SignBySecret(key string, chainId int, data []byte) ([
 	big35 := big.NewInt(35)
 	bigV.Sub(bigV, big35)
 
-	return crypto.EncodeSignature(R, S, byte(bigV.Int64()))
+	return crypto.EncodeSignature(R, S, bigV, false)
 }
 
 func (k *KmsSecretManager) GetSecretInfo(name string) (*secrets.SecretInfo, error) {

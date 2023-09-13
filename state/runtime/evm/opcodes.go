@@ -161,6 +161,9 @@ const (
 	// SELFBALANCE returns the balance of the current account
 	SELFBALANCE = 0x47
 
+	// BASEFEE returns the current base fee value
+	BASEFEE = 0x48
+
 	// POP pops a (u)int256 off the stack and discards it
 	POP = 0x50
 

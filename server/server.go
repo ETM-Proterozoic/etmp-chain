@@ -192,7 +192,23 @@ func NewServer(config *Config) (*Server, error) {
 	config.Chain.Genesis.StateRoot = genesisRoot
 
 	// use the eip155 signer
-	signer := crypto.NewEIP155Signer(uint64(m.config.Chain.Params.ChainID))
+	// signer := crypto.NewEIP155Signer(uint64(m.config.Chain.Params.ChainID))
+
+	// Use the london signer with eip-155 as a fallback one
+	var signer crypto.TxSigner = crypto.NewLondonSigner(
+		uint64(m.config.Chain.Params.ChainID),
+		false,
+		crypto.NewEIP155Signer(
+			uint64(m.config.Chain.Params.ChainID),
+			false,
+		),
+	)
+
+	fmt.Printf(" chain config %+v \n", config.Chain)
+	if config.Chain.Genesis.BaseFee == 0 {
+		config.Chain.Genesis.BaseFee = chain.GenesisBaseFee
+		config.Chain.Genesis.BaseFeeEM = chain.GenesisBaseFeeEM
+	}
 
 	// blockchain object
 	m.blockchain, err = blockchain.NewBlockchain(logger, m.config.DataDir, config.Chain, nil, m.executor, signer)

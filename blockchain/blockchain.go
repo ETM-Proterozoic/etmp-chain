@@ -22,6 +22,9 @@ import (
 )
 
 const (
+	// defaultBaseFeeChangeDenom is the value to bound the amount the base fee can change between blocks.
+	defaultBaseFeeChangeDenom = 8
+
 	BlockGasTargetDivisor uint64 = 1024 // The bound divisor of the gas limit, used in update calculations
 	defaultCacheSize      int    = 100  // The default size for Blockchain LRU cache structures
 )
@@ -91,7 +94,7 @@ type Verifier interface {
 	PreCommitState(header *types.Header, txn *state.Transition) error
 }
 
-// 	TODO: this should be part of Verifier (consensus)
+// TODO: this should be part of Verifier (consensus)
 type Executor interface {
 	ProcessBlock(parentRoot types.Hash, block *types.Block, blockCreator types.Address) (*state.Transition, error)
 }
@@ -973,7 +976,7 @@ func (b *Blockchain) updateGasPriceAvgWithBlock(block *types.Block) {
 
 	gasPrices := make([]*big.Int, len(block.Transactions))
 	for i, transaction := range block.Transactions {
-		gasPrices[i] = transaction.GasPrice
+		gasPrices[i] = transaction.GetGasPrice(block.Header.BaseFee)
 	}
 
 	b.updateGasPriceAvg(gasPrices)
@@ -1353,4 +1356,38 @@ func (b *Blockchain) GetBlockByNumber(blockNumber uint64, full bool) (*types.Blo
 // Close closes the DB connection
 func (b *Blockchain) Close() error {
 	return b.db.Close()
+}
+
+// CalculateBaseFee calculates the basefee of the header.
+func (b *Blockchain) CalculateBaseFee(parent *types.Header) uint64 {
+	if !b.config.Params.Forks.IsLondon(parent.Number) {
+		return chain.GenesisBaseFee
+	}
+
+	parentGasTarget := parent.GasLimit / b.config.Genesis.BaseFeeEM
+
+	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
+	if parent.GasUsed == parentGasTarget {
+		return parent.BaseFee
+	}
+
+	// If the parent block used more gas than its target, the baseFee should increase.
+	if parent.GasUsed > parentGasTarget {
+		gasUsedDelta := parent.GasUsed - parentGasTarget
+		baseFeeDelta := calcBaseFeeDelta(gasUsedDelta, parentGasTarget, parent.BaseFee)
+
+		return parent.BaseFee + common.Max(baseFeeDelta, 1)
+	}
+
+	// Otherwise, if the parent block used less gas than its target, the baseFee should decrease.
+	gasUsedDelta := parentGasTarget - parent.GasUsed
+	baseFeeDelta := calcBaseFeeDelta(gasUsedDelta, parentGasTarget, parent.BaseFee)
+
+	return common.Max(parent.BaseFee-baseFeeDelta, 0)
+}
+
+func calcBaseFeeDelta(gasUsedDelta, parentGasTarget, baseFee uint64) uint64 {
+	y := baseFee * gasUsedDelta / parentGasTarget
+
+	return y / defaultBaseFeeChangeDenom
 }

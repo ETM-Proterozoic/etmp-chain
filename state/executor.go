@@ -9,6 +9,7 @@ import (
 
 	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/crypto"
+	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/state/runtime"
 	"github.com/0xPolygon/polygon-edge/state/runtime/evm"
 	"github.com/0xPolygon/polygon-edge/state/runtime/precompiled"
@@ -153,9 +154,9 @@ func (e *Executor) BeginTxn(
 		Timestamp:  int64(header.Timestamp),
 		Number:     int64(header.Number),
 		Difficulty: types.BytesToHash(new(big.Int).SetUint64(header.Difficulty).Bytes()),
+		BaseFee:    new(big.Int).SetUint64(header.BaseFee),
 		GasLimit:   int64(header.GasLimit),
-		// ChainID:    int64(e.config.ChainID),
-		ChainID: int64(ChainID),
+		ChainID:    int64(ChainID),
 	}
 
 	txn := &Transition{
@@ -437,9 +438,18 @@ func (t *Transition) ContextPtr() *runtime.TxContext {
 }
 
 func (t *Transition) subGasLimitPrice(msg *types.Transaction) error {
-	// deduct the upfront max gas cost
-	upfrontGasCost := new(big.Int).Set(msg.GasPrice)
-	upfrontGasCost.Mul(upfrontGasCost, new(big.Int).SetUint64(msg.Gas))
+	upfrontGasCost := new(big.Int).SetUint64(msg.Gas)
+
+	factor := new(big.Int)
+	if msg.GasFeeCap != nil && msg.GasFeeCap.BitLen() > 0 {
+		// Apply EIP-1559 tx cost calculation factor
+		factor = factor.Set(msg.GasFeeCap)
+	} else {
+		// Apply legacy tx cost calculation factor
+		factor = factor.Set(msg.GasPrice)
+	}
+
+	upfrontGasCost = upfrontGasCost.Mul(upfrontGasCost, factor)
 
 	if err := t.state.SubBalance(msg.From, upfrontGasCost); err != nil {
 		if errors.Is(err, runtime.ErrNotEnoughFunds) {
@@ -462,6 +472,42 @@ func (t *Transition) nonceCheck(msg *types.Transaction) error {
 	return nil
 }
 
+// checkDynamicFees checks correctness of the EIP-1559 feature-related fields.
+// Basically, makes sure gas tip cap and gas fee cap are good.
+func (t *Transition) checkDynamicFees(msg *types.Transaction) error {
+	if msg.Type != types.DynamicFeeTx {
+		return nil
+	}
+
+	if msg.GasFeeCap.BitLen() == 0 && msg.GasTipCap.BitLen() == 0 {
+		return nil
+	}
+
+	if l := msg.GasFeeCap.BitLen(); l > 256 {
+		return fmt.Errorf("%w: address %v, GasFeeCap bit length: %d", ErrFeeCapVeryHigh,
+			msg.From.String(), l)
+	}
+
+	if l := msg.GasTipCap.BitLen(); l > 256 {
+		return fmt.Errorf("%w: address %v, GasTipCap bit length: %d", ErrTipVeryHigh,
+			msg.From.String(), l)
+	}
+
+	if msg.GasFeeCap.Cmp(msg.GasTipCap) < 0 {
+		return fmt.Errorf("%w: address %v, GasTipCap: %s, GasFeeCap: %s", ErrTipAboveFeeCap,
+			msg.From.String(), msg.GasTipCap, msg.GasFeeCap)
+	}
+
+	// This will panic if baseFee is nil, but basefee presence is verified
+	// as part of header validation.
+	if msg.GasFeeCap.Cmp(t.ctx.BaseFee) < 0 {
+		return fmt.Errorf("%w: address %v, GasFeeCap: %s, BaseFee: %s", ErrFeeCapTooLow,
+			msg.From.String(), msg.GasFeeCap, t.ctx.BaseFee)
+	}
+
+	return nil
+}
+
 // errors that can originate in the consensus rules checks of the apply method below
 // surfacing of these errors reject the transaction thus not including it in the block
 
@@ -472,6 +518,22 @@ var (
 	ErrIntrinsicGasOverflow  = fmt.Errorf("overflow in intrinsic gas calculation")
 	ErrNotEnoughIntrinsicGas = fmt.Errorf("not enough gas supplied for intrinsic gas costs")
 	ErrNotEnoughFunds        = fmt.Errorf("not enough funds for transfer with given value")
+
+	// ErrTipAboveFeeCap is a sanity error to ensure no one is able to specify a
+	// transaction with a tip higher than the total fee cap.
+	ErrTipAboveFeeCap = errors.New("max priority fee per gas higher than max fee per gas")
+
+	// ErrTipVeryHigh is a sanity error to avoid extremely big numbers specified
+	// in the tip field.
+	ErrTipVeryHigh = errors.New("max priority fee per gas higher than 2^256-1")
+
+	// ErrFeeCapVeryHigh is a sanity error to avoid extremely big numbers specified
+	// in the fee cap field.
+	ErrFeeCapVeryHigh = errors.New("max fee per gas higher than 2^256-1")
+
+	// ErrFeeCapTooLow is returned if the transaction fee cap is less than the
+	// the base fee of the block.
+	ErrFeeCapTooLow = errors.New("max fee per gas less than block base fee")
 )
 
 type TransitionApplicationError struct {
@@ -501,39 +563,25 @@ func NewGasLimitReachedTransitionApplicationError(err error) *GasLimitReachedTra
 }
 
 func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, error) {
-	// First check this message satisfies all consensus rules before
-	// applying the message. The rules include these clauses
-	//
-	// 1. the nonce of the message caller is correct
-	// 2. caller has enough balance to cover transaction fee(gaslimit * gasprice)
-	// 3. the amount of gas required is available in the block
-	// 4. there is no overflow when calculating intrinsic gas
-	// 5. the purchased gas is enough to cover intrinsic usage
-	// 6. caller has enough balance to cover asset transfer for **topmost** call
-	txn := t.state
+	var err error
 
-	// 1. the nonce of the message caller is correct
-	if err := t.nonceCheck(msg); err != nil {
-		return nil, NewTransitionApplicationError(err, true)
+	if msg.Type == types.StateTx {
+		err = checkAndProcessStateTx(msg)
+	} else {
+		err = checkAndProcessTx(msg, t)
 	}
 
-	// 2. caller has enough balance to cover transaction fee(gaslimit * gasprice)
-	if err := t.subGasLimitPrice(msg); err != nil {
-		return nil, NewTransitionApplicationError(err, true)
+	if err != nil {
+		return nil, err
 	}
 
-	// 3. the amount of gas required is available in the block
-	if err := t.subGasPool(msg.Gas); err != nil {
+	// the amount of gas required is available in the block
+	if err = t.subGasPool(msg.Gas); err != nil {
 		return nil, NewGasLimitReachedTransitionApplicationError(err)
 	}
 
-	// start tracing
-	var result *runtime.ExecutionResult
-	if t.traceConfig.Debug {
-		t.traceConfig.Tracer.CaptureTxStart(msg.Gas)
-		defer func() {
-			t.traceConfig.Tracer.CaptureTxEnd(result.GasLeft)
-		}()
+	if t.ctx.Tracer != nil {
+		t.ctx.Tracer.TxStart(msg.Gas)
 	}
 
 	// 4. there is no overflow when calculating intrinsic gas
@@ -542,46 +590,67 @@ func (t *Transition) apply(msg *types.Transaction) (*runtime.ExecutionResult, er
 		return nil, NewTransitionApplicationError(err, false)
 	}
 
-	// 5. the purchased gas is enough to cover intrinsic usage
+	// the purchased gas is enough to cover intrinsic usage
 	gasLeft := msg.Gas - intrinsicGasCost
-	// Because we are working with unsigned integers for gas, the `>` operator is used instead of the more intuitive `<`
+	// because we are working with unsigned integers for gas, the `>` operator is used instead of the more intuitive `<`
 	if gasLeft > msg.Gas {
 		return nil, NewTransitionApplicationError(ErrNotEnoughIntrinsicGas, false)
 	}
 
-	// 6. caller has enough balance to cover asset transfer for **topmost** call
-	if balance := txn.GetBalance(msg.From); balance.Cmp(msg.Value) < 0 {
-		return nil, NewTransitionApplicationError(ErrNotEnoughFunds, true)
-	}
-
-	gasPrice := new(big.Int).Set(msg.GasPrice)
+	gasPrice := msg.GetGasPrice(t.ctx.BaseFee.Uint64())
 	value := new(big.Int).Set(msg.Value)
 
-	// Set the specific transaction fields in the context
+	// set the specific transaction fields in the context
 	t.ctx.GasPrice = types.BytesToHash(gasPrice.Bytes())
 	t.ctx.Origin = msg.From
 
+	var result *runtime.ExecutionResult
 	if msg.IsContractCreation() {
 		result = t.Create2(msg.From, msg.Input, value, gasLeft)
 	} else {
-		txn.IncrNonce(msg.From)
+		t.state.IncrNonce(msg.From)
 		result = t.Call2(msg.From, *msg.To, msg.Input, value, gasLeft)
 	}
 
-	refund := txn.GetRefund()
+	refund := t.state.GetRefund()
 	result.UpdateGasUsed(msg.Gas, refund)
 
 	if t.ctx.Tracer != nil {
 		t.ctx.Tracer.TxEnd(result.GasLeft)
 	}
 
-	// refund the sender
+	// Refund the sender
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(result.GasLeft), gasPrice)
-	txn.AddBalance(msg.From, remaining)
+	t.state.AddBalance(msg.From, remaining)
 
-	// pay the coinbase
-	coinbaseFee := new(big.Int).Mul(new(big.Int).SetUint64(result.GasUsed), gasPrice)
-	txn.AddBalance(t.ctx.Coinbase, coinbaseFee)
+	// Spec: https://eips.ethereum.org/EIPS/eip-1559#specification
+	// Define effective tip based on tx type.
+	// We use EIP-1559 fields of the tx if the london hardfork is enabled.
+	// Effective tip became to be either gas tip cap or (gas fee cap - current base fee)
+	effectiveTip := new(big.Int).Set(gasPrice)
+	if t.config.London && msg.Type == types.DynamicFeeTx {
+		effectiveTip = common.BigMin(
+			new(big.Int).Sub(msg.GasFeeCap, t.ctx.BaseFee),
+			new(big.Int).Set(msg.GasTipCap),
+		)
+	}
+
+	// Pay the coinbase fee as a miner reward using the calculated effective tip.
+	coinbaseFee := new(big.Int).Mul(new(big.Int).SetUint64(result.GasUsed), effectiveTip)
+	t.state.AddBalance(t.ctx.Coinbase, coinbaseFee)
+
+	// Burn some amount if the london hardfork is applied.
+	// Basically, burn amount is just transferred to the current burn contract.
+	if t.config.London && msg.Type != types.StateTx {
+		burnAmount := new(big.Int).Mul(new(big.Int).SetUint64(result.GasUsed), t.ctx.BaseFee)
+		/*
+			fee := new(big.Int).SetUint64(st.gasUsed())
+			fee.Mul(fee, effectiveTip)
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		*/
+		// t.state.AddBalance(t.ctx.BurnContract, burnAmount)
+		t.state.AddBalance(t.ctx.Coinbase, burnAmount) // burn to coinbase
+	}
 
 	// return gas to the pool
 	t.addGasPool(result.GasLeft)
@@ -1028,4 +1097,52 @@ func (t *Transition) captureCallEnd(c *runtime.Contract, result *runtime.Executi
 		result.ReturnValue,
 		result.Err,
 	)
+}
+
+// checkAndProcessTx - first check if this message satisfies all consensus rules before
+// applying the message. The rules include these clauses:
+// 1. the nonce of the message caller is correct
+// 2. caller has enough balance to cover transaction fee(gaslimit * gasprice * val) or fee(gasfeecap * gasprice * val)
+func checkAndProcessTx(msg *types.Transaction, t *Transition) error {
+	// 1. the nonce of the message caller is correct
+	if err := t.nonceCheck(msg); err != nil {
+		return NewTransitionApplicationError(err, true)
+	}
+
+	// 2. check dynamic fees of the transaction
+	if err := t.checkDynamicFees(msg); err != nil {
+		return NewTransitionApplicationError(err, true)
+	}
+
+	// 3. caller has enough balance to cover transaction
+	if err := t.subGasLimitPrice(msg); err != nil {
+		return NewTransitionApplicationError(err, true)
+	}
+
+	return nil
+}
+
+func checkAndProcessStateTx(msg *types.Transaction) error {
+	if msg.GasPrice.Cmp(big.NewInt(0)) != 0 {
+		return NewTransitionApplicationError(
+			errors.New("gasPrice of state transaction must be zero"),
+			true,
+		)
+	}
+
+	if msg.Gas != types.StateTransactionGasLimit {
+		return NewTransitionApplicationError(
+			fmt.Errorf("gas of state transaction must be %d", types.StateTransactionGasLimit),
+			true,
+		)
+	}
+
+	if msg.To == nil || *msg.To == types.ZeroAddress {
+		return NewTransitionApplicationError(
+			errors.New("to of state transaction must be specified"),
+			true,
+		)
+	}
+
+	return nil
 }

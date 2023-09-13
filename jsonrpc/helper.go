@@ -189,6 +189,14 @@ func DecodeTxn(arg *txnArgs, store nonceGetter) (*types.Transaction, error) {
 		arg.GasPrice = argBytesPtr([]byte{})
 	}
 
+	if arg.GasTipCap == nil {
+		arg.GasTipCap = argBytesPtr([]byte{})
+	}
+
+	if arg.GasFeeCap == nil {
+		arg.GasFeeCap = argBytesPtr([]byte{})
+	}
+
 	var input []byte
 	if arg.Data != nil {
 		input = *arg.Data

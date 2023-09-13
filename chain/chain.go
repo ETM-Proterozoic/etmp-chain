@@ -7,17 +7,27 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/helper/hex"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/hashicorp/go-multierror"
+	"github.com/umbracle/ethgo"
 )
 
-var (
+const (
+	// GenesisBaseFeeEM is the initial base fee elasticity multiplier for EIP-1559 blocks.
+	GenesisBaseFeeEM = 2
+
 	// GenesisGasLimit is the default gas limit of the Genesis block.
 	GenesisGasLimit uint64 = 4712388
 
 	// GenesisDifficulty is the default difficulty of the Genesis block.
-	GenesisDifficulty = big.NewInt(131072)
+	GenesisDifficulty uint64 = 131072
+)
+
+var (
+	// GenesisBaseFee is the initial base fee for EIP-1559 blocks.
+	GenesisBaseFee = ethgo.Gwei(1).Uint64()
 )
 
 // Chain is the blockchain chain configuration
@@ -40,6 +50,8 @@ type Genesis struct {
 	Mixhash    types.Hash                        `json:"mixHash"`
 	Coinbase   types.Address                     `json:"coinbase"`
 	Alloc      map[types.Address]*GenesisAccount `json:"alloc,omitempty"`
+	BaseFee    uint64                            `json:"baseFee"`
+	BaseFeeEM  uint64                            `json:"baseFeeEM"`
 
 	// Override
 	StateRoot types.Hash
@@ -66,6 +78,7 @@ func (g *Genesis) GenesisHeader() *types.Header {
 		ExtraData:    g.ExtraData,
 		GasLimit:     g.GasLimit,
 		GasUsed:      g.GasUsed,
+		BaseFee:      g.BaseFee,
 		Difficulty:   g.Difficulty,
 		MixHash:      g.Mixhash,
 		Miner:        g.Coinbase.Bytes(),
@@ -81,7 +94,11 @@ func (g *Genesis) GenesisHeader() *types.Header {
 	}
 
 	if g.Difficulty == 0 {
-		head.Difficulty = GenesisDifficulty.Uint64()
+		head.Difficulty = GenesisDifficulty
+	}
+
+	if g.BaseFee == 0 {
+		head.BaseFee = GenesisBaseFee
 	}
 
 	return head
@@ -109,6 +126,8 @@ func (g *Genesis) MarshalJSON() ([]byte, error) {
 		Number     *string                     `json:"number,omitempty"`
 		GasUsed    *string                     `json:"gasUsed,omitempty"`
 		ParentHash types.Hash                  `json:"parentHash"`
+		BaseFee    *string                     `json:"baseFee"`
+		BaseFeeEM  *string                     `json:"baseFeeEM"`
 	}
 
 	var enc Genesis
@@ -119,6 +138,8 @@ func (g *Genesis) MarshalJSON() ([]byte, error) {
 
 	enc.GasLimit = types.EncodeUint64(g.GasLimit)
 	enc.Difficulty = types.EncodeUint64(g.Difficulty)
+	enc.BaseFee = types.EncodeUint64(g.BaseFee)
+	enc.BaseFeeEM = types.EncodeUint64(g.BaseFeeEM)
 
 	enc.Mixhash = g.Mixhash
 	enc.Coinbase = g.Coinbase
@@ -153,6 +174,8 @@ func (g *Genesis) UnmarshalJSON(data []byte) error {
 		Number     *string                    `json:"number"`
 		GasUsed    *string                    `json:"gasUsed"`
 		ParentHash *types.Hash                `json:"parentHash"`
+		BaseFee    *string                    `json:"baseFee"`
+		BaseFeeEM  *string                    `json:"baseFeeEM"`
 	}
 
 	var dec Genesis
@@ -197,6 +220,16 @@ func (g *Genesis) UnmarshalJSON(data []byte) error {
 	g.Difficulty, subErr = types.ParseUint64orHex(dec.Difficulty)
 	if subErr != nil {
 		parseError("difficulty", subErr)
+	}
+
+	g.BaseFee, subErr = common.ParseUint64orHex(dec.BaseFee)
+	if subErr != nil {
+		parseError("baseFee", subErr)
+	}
+
+	g.BaseFeeEM, subErr = common.ParseUint64orHex(dec.BaseFeeEM)
+	if subErr != nil {
+		parseError("baseFeeEM", subErr)
 	}
 
 	if dec.Mixhash != nil {
