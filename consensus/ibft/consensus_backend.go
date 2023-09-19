@@ -223,6 +223,8 @@ func (i *backendIBFT) buildBlock(parent *types.Header) (*types.Block, error) {
 	header.StateRoot = root
 	header.GasUsed = transition.TotalGas()
 
+	fmt.Printf(" txs --------  %+v \n ", txs)
+
 	// build the block
 	block := consensus.BuildBlock(consensus.BuildBlockParams{
 		Header:   header,
@@ -363,6 +365,7 @@ func (i *backendIBFT) writeTransaction(
 	transition transitionInterface,
 	gasLimit uint64,
 ) (*txExeResult, bool) {
+	fmt.Printf(" writeTransaction -------- begin %+v \n ", tx)
 	if tx == nil {
 		return nil, false
 	}
@@ -380,25 +383,31 @@ func (i *backendIBFT) writeTransaction(
 		}
 
 		// continue processing
+		fmt.Printf(" writeTransaction -------- fuck \n ")
 		return &txExeResult{tx, fail}, true
 	}
+	fmt.Printf(" writeTransaction -------- 1 \n ")
 
 	if err := transition.Write(tx); err != nil {
 		if _, ok := err.(*state.GasLimitReachedTransitionApplicationError); ok { //nolint:errorlint
+			fmt.Printf(" writeTransaction -------- 2 \n ")
 			// stop processing
 			return nil, false
 		} else if appErr, ok := err.(*state.TransitionApplicationError); ok && appErr.IsRecoverable { //nolint:errorlint
+			fmt.Printf(" writeTransaction -------- 3 \n ")
 			i.txpool.Demote(tx)
 
 			return &txExeResult{tx, skip}, true
 		} else {
 			i.txpool.Drop(tx)
 
+			fmt.Printf(" writeTransaction -------- 4 \n ")
 			return &txExeResult{tx, fail}, true
 		}
 	}
 
 	i.txpool.Pop(tx)
+	fmt.Printf(" writeTransaction -------- %+v \n ", tx)
 
 	return &txExeResult{tx, success}, true
 }
