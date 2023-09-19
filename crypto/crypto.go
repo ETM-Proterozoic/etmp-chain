@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime/debug"
 
 	"github.com/0xPolygon/polygon-edge/helper/hex"
 	"github.com/0xPolygon/polygon-edge/helper/keystore"
@@ -296,6 +297,7 @@ func BytesToECDSAPrivateKey(input []byte) (*ecdsa.PrivateKey, error) {
 	// Make sure the key is properly formatted
 	if len(decoded) != 32 {
 		// Key must be exactly 64 chars (32B) long
+		debug.PrintStack()
 		return nil, fmt.Errorf("invalid key length (%dB), should be 32B", len(decoded))
 	}
 
