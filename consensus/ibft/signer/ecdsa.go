@@ -3,7 +3,6 @@ package signer
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"runtime/debug"
 
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/secrets"
@@ -144,8 +143,8 @@ func (s *ECDSAKeyManager) verifyCommittedSealsImpl(
 	validators validators.Validators,
 ) (int, error) {
 	numSeals := committedSeal.Num()
-	fmt.Printf(" numSeals ------- %d \n", numSeals)
-	debug.PrintStack()
+	// fmt.Printf(" numSeals ------- %d \n", numSeals)
+	// debug.PrintStack()
 	if numSeals == 0 {
 		return 0, ErrEmptyCommittedSeals
 	}
