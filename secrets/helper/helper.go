@@ -172,6 +172,11 @@ func InitNetworkingPrivateKey(secretsManager secrets.SecretsManager) (libp2pCryp
 
 // LoadValidatorAddress loads ECDSA key by SecretsManager and returns validator address
 func LoadValidatorAddress(secretsManager secrets.SecretsManager) (types.Address, error) {
+	if k, ok := secretsManager.(*awskms.KmsSecretManager); ok {
+		info, _ := k.GetSecretInfo(secrets.ValidatorKey)
+		return types.StringToAddress(info.Address), nil
+	}
+
 	if !secretsManager.HasSecret(secrets.ValidatorKey) {
 		return types.ZeroAddress, nil
 	}

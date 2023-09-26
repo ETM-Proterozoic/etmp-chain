@@ -7,6 +7,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/consensus/ibft/hook"
 	"github.com/0xPolygon/polygon-edge/consensus/ibft/signer"
 	"github.com/0xPolygon/polygon-edge/secrets"
+	"github.com/0xPolygon/polygon-edge/secrets/awskms"
 	"github.com/0xPolygon/polygon-edge/state"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/0xPolygon/polygon-edge/validators"
@@ -241,6 +242,10 @@ func (m *ForkManager) initializeKeyManagers() error {
 func (m *ForkManager) initializeKeyManager(valType validators.ValidatorType) error {
 	if _, ok := m.keyManagers[valType]; ok {
 		return nil
+	}
+
+	if _, ok := m.secretsManager.(*awskms.KmsSecretManager); ok {
+		m.logger.Info("###### Kms Secret Manager ######")
 	}
 
 	keyManager, err := signer.NewKeyManagerFromType(m.secretsManager, valType, m.chainParams.ChainID)

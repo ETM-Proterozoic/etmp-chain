@@ -8,6 +8,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/secrets"
+	"github.com/0xPolygon/polygon-edge/secrets/awskms"
 	"github.com/0xPolygon/polygon-edge/secrets/local"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/0xPolygon/polygon-edge/validators"
@@ -118,6 +119,11 @@ func GetValidatorsFromPrefixPath(
 }
 
 func getValidatorAddressFromSecretManager(manager secrets.SecretsManager) (types.Address, error) {
+	if k, ok := manager.(*awskms.KmsSecretManager); ok {
+		info, _ := k.GetSecretInfo(secrets.ValidatorKey)
+		return types.StringToAddress(info.Address), nil
+	}
+
 	if !manager.HasSecret(secrets.ValidatorKey) {
 		return types.ZeroAddress, ErrECDSAKeyNotFound
 	}
