@@ -3,6 +3,7 @@ package fork
 import (
 	"errors"
 
+	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/consensus/ibft/hook"
 	"github.com/0xPolygon/polygon-edge/consensus/ibft/signer"
 	"github.com/0xPolygon/polygon-edge/secrets"
@@ -67,6 +68,8 @@ type ForkManager struct {
 	filePath  string
 	epochSize uint64
 
+	chainParams *chain.Params
+
 	// submodule lookup
 	keyManagers     map[validators.ValidatorType]signer.KeyManager
 	validatorStores map[store.SourceType]ValidatorStore
@@ -82,6 +85,7 @@ func NewForkManager(
 	filePath string,
 	epochSize uint64,
 	ibftConfig map[string]interface{},
+	chainParams *chain.Params,
 ) (*ForkManager, error) {
 	forks, err := GetIBFTForks(ibftConfig)
 	if err != nil {
@@ -96,6 +100,7 @@ func NewForkManager(
 		filePath:        filePath,
 		epochSize:       epochSize,
 		forks:           forks,
+		chainParams:     chainParams,
 		keyManagers:     make(map[validators.ValidatorType]signer.KeyManager),
 		validatorStores: make(map[store.SourceType]ValidatorStore),
 		hooksRegisters:  make(map[IBFTType]HooksRegister),
@@ -238,7 +243,7 @@ func (m *ForkManager) initializeKeyManager(valType validators.ValidatorType) err
 		return nil
 	}
 
-	keyManager, err := signer.NewKeyManagerFromType(m.secretsManager, valType)
+	keyManager, err := signer.NewKeyManagerFromType(m.secretsManager, valType, m.chainParams.ChainID)
 	if err != nil {
 		return err
 	}

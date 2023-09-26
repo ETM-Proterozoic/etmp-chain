@@ -8,6 +8,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/crypto"
 	"github.com/0xPolygon/polygon-edge/helper/keccak"
 	"github.com/0xPolygon/polygon-edge/secrets"
+	"github.com/0xPolygon/polygon-edge/secrets/awskms"
 	"github.com/0xPolygon/polygon-edge/secrets/helper"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/0xPolygon/polygon-edge/validators"
@@ -29,6 +30,14 @@ func wrapCommitHash(data []byte) []byte {
 
 // getOrCreateECDSAKey loads ECDSA key or creates a new key
 func getOrCreateECDSAKey(manager secrets.SecretsManager) (*ecdsa.PrivateKey, error) {
+	if manager.GetSecretsManagerType() == secrets.AwsKms {
+		validatorKey, _, err := crypto.GenerateAndEncodeECDSAPrivateKey()
+		if err != nil {
+			return nil, err
+		}
+		return validatorKey, nil
+	}
+
 	if !manager.HasSecret(secrets.ValidatorKey) {
 		if _, err := helper.InitECDSAValidatorKey(manager); err != nil {
 			return nil, err
@@ -98,9 +107,14 @@ func ecrecover(sig, msg []byte) (types.Address, error) {
 func NewKeyManagerFromType(
 	secretManager secrets.SecretsManager,
 	validatorType validators.ValidatorType,
+	chainId int,
 ) (KeyManager, error) {
 	switch validatorType {
 	case validators.ECDSAValidatorType:
+		_, ok := secretManager.(*awskms.KmsSecretManager)
+		if ok {
+			return NewKmsKeyManager(secretManager, chainId)
+		}
 		return NewECDSAKeyManager(secretManager)
 	case validators.BLSValidatorType:
 		return NewBLSKeyManager(secretManager)

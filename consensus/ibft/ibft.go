@@ -133,6 +133,7 @@ func Factory(params *consensus.Params) (consensus.Consensus, error) {
 		params.Config.Path,
 		epochSize,
 		params.Config.Config,
+		params.Config.Params,
 	)
 
 	if err != nil {
