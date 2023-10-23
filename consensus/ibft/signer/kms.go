@@ -81,9 +81,9 @@ func (k *KmsKeyManager) VerifyCommittedSeal(
 		return ErrSignerMismatch
 	}
 
-	if !vals.Includes(address) {
-		return ErrNonValidatorCommittedSeal
-	}
+	// if !vals.Includes(address) {
+	// 	return ErrNonValidatorCommittedSeal
+	// }
 
 	return nil
 }
