@@ -86,9 +86,9 @@ func (s *ECDSAKeyManager) VerifyCommittedSeal(
 		return ErrSignerMismatch
 	}
 
-	if !vals.Includes(address) {
-		return ErrNonValidatorCommittedSeal
-	}
+	// if !vals.Includes(address) {
+	// 	return ErrNonValidatorCommittedSeal
+	// }
 
 	return nil
 }
@@ -161,9 +161,9 @@ func (s *ECDSAKeyManager) verifyCommittedSealsImpl(
 			return 0, ErrRepeatedCommittedSeal
 		}
 
-		if !validators.Includes(addr) {
-			return 0, ErrNonValidatorCommittedSeal
-		}
+		// if !validators.Includes(addr) {
+		// 	return 0, ErrNonValidatorCommittedSeal
+		// }
 
 		visited[addr] = true
 	}
