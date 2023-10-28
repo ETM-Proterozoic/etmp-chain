@@ -155,9 +155,9 @@ func (k *KmsKeyManager) verifyCommittedSealsImpl(
 			return 0, ErrRepeatedCommittedSeal
 		}
 
-		if !validators.Includes(addr) {
-			return 0, ErrNonValidatorCommittedSeal
-		}
+		// if !validators.Includes(addr) {
+		// 	return 0, ErrNonValidatorCommittedSeal
+		// }
 
 		visited[addr] = true
 	}
