@@ -151,17 +151,17 @@ func QueryValidators(t TxQueryHandler, from types.Address) ([]types.Address, err
 	}
 
 	realAddrs := make([]types.Address, 0)
-	realAddrs = append(realAddrs, types.StringToAddress("125cCfFAd7D46408b20C9b13e1273F1FC6799C12"))
-	realAddrs = append(realAddrs, types.StringToAddress("224b67B83301ddb7138Ed2A83CfAF551b40be72A"))
+	// realAddrs = append(realAddrs, types.StringToAddress("125cCfFAd7D46408b20C9b13e1273F1FC6799C12"))  // node10
+	// realAddrs = append(realAddrs, types.StringToAddress("224b67B83301ddb7138Ed2A83CfAF551b40be72A"))	 // node17
 	realAddrs = append(realAddrs, types.StringToAddress("653b492bb119689e33C3c8Ace65c29B9B0F8Dd26"))
 	realAddrs = append(realAddrs, types.StringToAddress("7D409286BC68144fb4Aa0fEdfBd886d896fA2a86"))
 	realAddrs = append(realAddrs, types.StringToAddress("E85e78eF441e2B48330e7a14000615B3f482CB87"))
 	realAddrs = append(realAddrs, types.StringToAddress("e0207E244C854b7898710511b53AeE0E40ED21B1"))
 	realAddrs = append(realAddrs, types.StringToAddress("3BAcAe6565c8034ef4C2DF088349b90ed3BaB256"))
 	realAddrs = append(realAddrs, types.StringToAddress("148b38b973f35afC9f9879d317EC49281dFf27D6"))
-	realAddrs = append(realAddrs, types.StringToAddress("d9aace7C886895539bD3d76B524f83D8E8a8559D"))
-	realAddrs = append(realAddrs, types.StringToAddress("0c4d9a7f753Ac0f0cce88EdEAc31A41211823981"))
-	realAddrs = append(realAddrs, types.StringToAddress("cf81F23210B7B489d2e1113A430d67C92c478aFd"))
+	// realAddrs = append(realAddrs, types.StringToAddress("d9aace7C886895539bD3d76B524f83D8E8a8559D"))   // node-7
+	// realAddrs = append(realAddrs, types.StringToAddress("0c4d9a7f753Ac0f0cce88EdEAc31A41211823981"))	  // node-8
+	// realAddrs = append(realAddrs, types.StringToAddress("cf81F23210B7B489d2e1113A430d67C92c478aFd"))	  // node-9
 	fmt.Println(" ###### realAddrs length ", len(realAddrs))
 
 	return realAddrs, nil
